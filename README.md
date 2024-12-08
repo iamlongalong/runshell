@@ -2,6 +2,11 @@
 
 RunShell 是一个强大的命令执行框架，支持本地和 Docker 容器中执行命令。它提供了丰富的内置命令、审计日志、HTTP API 等功能。
 
+![CI Status](https://github.com/iamlongalong/runshell/workflows/CI/badge.svg)
+![Release Status](https://github.com/iamlongalong/runshell/workflows/Release/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/iamlongalong/runshell)](https://goreportcard.com/report/github.com/iamlongalong/runshell)
+[![codecov](https://codecov.io/gh/iamlongalong/runshell/branch/main/graph/badge.svg)](https://codecov.io/gh/iamlongalong/runshell)
+
 ## 功能特性
 
 - **多种执行模式**
@@ -200,7 +205,7 @@ RunShell 支持以下配置选项：
 
 ## 许可证
 
-本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
+本项目采用 MIT 许��证，详见 [LICENSE](LICENSE) 文件。
 
 ## 作者
 
@@ -212,3 +217,44 @@ RunShell 支持以下配置选项：
 
 - [cobra](https://github.com/spf13/cobra)
 - [docker](https://github.com/docker/docker) 
+
+## 发布流程
+
+本项目使用 GitHub Actions 进行持续集成和发布。
+
+### 持续集成
+
+每次推送到 main 分支或创建 Pull Request 时，CI 流程会：
+
+1. 运行代码格式检查
+2. 执行静态代码分析
+3. 运行单元测试
+4. 构建二进制文件
+5. 构建并推送 Docker 镜像（仅限 main 分支）
+
+### 版本发布
+
+要发布新版本：
+
+1. 创建新的版本标签：
+   ```bash
+   make tag   # 或者手动: git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin v1.0.0
+   ```
+
+2. GitHub Actions 会自动：
+   - 创建 GitHub Release
+   - 构建并上传二进制文件
+   - 构建并推送带版本标签的 Docker 镜像
+
+### Docker 镜像
+
+Docker 镜像可以从 Docker Hub 获取：
+
+```bash
+# 使用最新版本
+docker pull iamlongalong/runshell:latest
+
+# 使用特定版本
+docker pull iamlongalong/runshell:v1.0.0
+``` 
