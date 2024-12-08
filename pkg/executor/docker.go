@@ -3,291 +3,139 @@
 package executor
 
 import (
-	"context"
 	"fmt"
-	"strings"
+	"os/exec"
 	"sync"
-	"time"
 
-	dockertypes "github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
-// DockerExecutor 实现了在 Docker 容器中执行命令的执行器。
-// 特性：
-// - 支持在指定镜像中执行命令
-// - 自动管理容器的生命周期
-// - 支持环境变量和工作目录配置
-// - 命令注册和管理
+// DockerExecutor Docker 命令执行器
 type DockerExecutor struct {
-	client       *client.Client // Docker 客户端实例
-	commands     sync.Map       // 注册的命令映射
-	defaultImage string         // 默认使用的 Docker 镜像
+	commands     sync.Map // 注册的命令
+	defaultImage string   // 默认 Docker 镜像
 }
 
-// NewDockerExecutor 创建一个新的 Docker 执行器实例。
-// 参数：
-//   - defaultImage：默认使用的 Docker 镜像名称
-//
-// 返回值：
-//   - *DockerExecutor：执行器实例
-//   - error：创建过程中的错误
-func NewDockerExecutor(defaultImage string) (*DockerExecutor, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return nil, err
-	}
-
+// NewDockerExecutor 创建新的 Docker 执行器
+func NewDockerExecutor(image string) *DockerExecutor {
 	return &DockerExecutor{
-		client:       cli,
-		defaultImage: defaultImage,
-	}, nil
+		defaultImage: image,
+	}
 }
 
-// Execute 执行指定的命令。
-// 执行过程：
-// 1. 首先检查是否为注册的内置命令
-// 2. 如果不是内置命令，则在 Docker 容器中执行
-//
-// 参数：
-//   - ctx：上下文，用于取消和超时控制
-//   - cmdName：要执行的命令名称
-//   - args：命令参数列表
-//   - opts：执行选项（工作目录、环境变量等）
-//
-// 返回值：
-//   - *types.ExecuteResult：执行结果
-//   - error：执行过程中的错误
-func (e *DockerExecutor) Execute(ctx context.Context, cmdName string, args []string, opts *types.ExecuteOptions) (*types.ExecuteResult, error) {
-	if opts == nil {
-		opts = &types.ExecuteOptions{
-			Env:     make(map[string]string),
-			WorkDir: "",
-		}
+// Execute 执行命令
+func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("no command specified")
 	}
 
-	// 检查命令是否已注册
-	if cmd, ok := e.commands.Load(cmdName); ok {
+	// 检查是否是内置命令
+	if cmd, ok := e.commands.Load(ctx.Args[0]); ok {
 		command := cmd.(*types.Command)
-		execCtx := &types.ExecuteContext{
-			Context:   ctx,
-			Args:      args,
-			Options:   opts,
-			StartTime: time.Now(),
-		}
-		return command.Handler.Execute(execCtx)
+		return command.Execute(ctx)
 	}
 
-	// 如果命令未注册，使用默认Docker执行方式
-	return e.executeInDocker(ctx, cmdName, args, opts)
-}
+	// 准备 Docker 命令
+	args := []string{"run", "--rm"}
 
-// executeInDocker 在 Docker 容器中执行命令。
-// 执行流程：
-// 1. 创建容器配置
-// 2. 创建并启动容器
-// 3. 等待命令执行完成
-// 4. 收集执行结果
-// 5. 清理容器
-//
-// 参数：
-//   - ctx：上下文
-//   - cmdName：命令名称
-//   - args：命令参数
-//   - opts：执行选项
-func (e *DockerExecutor) executeInDocker(ctx context.Context, cmdName string, args []string, opts *types.ExecuteOptions) (*types.ExecuteResult, error) {
+	// 添加工作目录
+	if ctx.Options.WorkDir != "" {
+		args = append(args, "-w", ctx.Options.WorkDir)
+	}
+
+	// 添加环境变量
+	for k, v := range ctx.Options.Env {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// 添加镜像名称
+	args = append(args, e.defaultImage)
+
+	// 添加要执行的命令和参数
+	args = append(args, ctx.Args...)
+
+	// 创建命令
+	cmd := exec.CommandContext(ctx.Context, "docker", args...)
+
+	// 设置输入输出
+	if ctx.IsPiped {
+		if ctx.PipeInput != nil {
+			cmd.Stdin = ctx.PipeInput
+		}
+		if ctx.PipeOutput != nil {
+			cmd.Stdout = ctx.PipeOutput
+		}
+		if ctx.Options.Stderr != nil {
+			cmd.Stderr = ctx.Options.Stderr
+		}
+	} else {
+		cmd.Stdin = ctx.Options.Stdin
+		cmd.Stdout = ctx.Options.Stdout
+		cmd.Stderr = ctx.Options.Stderr
+	}
+
+	// 执行命令
+	startTime := types.GetTimeNow()
+	err := cmd.Run()
+	endTime := types.GetTimeNow()
+
 	result := &types.ExecuteResult{
-		CommandName: cmdName,
-		StartTime:   time.Now(),
+		CommandName: ctx.Args[0],
+		StartTime:   startTime,
+		EndTime:     endTime,
 	}
 
-	// 准备容器配置
-	// 首先检查命令是否存在，不存在则返回错误
-	shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1 || { echo '%s: command not found' >&2; exit 127; }; %s %s", cmdName, cmdName, cmdName, shellEscapeArgs(args))
-	config := &container.Config{
-		Image:      e.defaultImage,
-		Cmd:        []string{"/bin/sh", "-c", shellCmd},
-		Tty:        false,
-		OpenStdin:  false,
-		StdinOnce:  true,
-		Env:        makeEnvSlice(opts.Env),
-		WorkingDir: opts.WorkDir,
-	}
-
-	// 创建容器
-	resp, err := e.client.ContainerCreate(ctx, config, &container.HostConfig{}, nil, nil, "")
 	if err != nil {
-		result.Error = err
-		result.EndTime = time.Now()
-		return result, err
-	}
-
-	// 确保容器被清理
-	defer e.client.ContainerRemove(context.Background(), resp.ID, dockertypes.ContainerRemoveOptions{Force: true})
-
-	// 启动容器
-	if err := e.client.ContainerStart(ctx, resp.ID, dockertypes.ContainerStartOptions{}); err != nil {
-		result.Error = err
-		result.EndTime = time.Now()
-		return result, err
-	}
-
-	// 等待容器结束
-	statusCh, errCh := e.client.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		result.Error = err
-		result.EndTime = time.Now()
-		return result, err
-	case status := <-statusCh:
-		result.ExitCode = int(status.StatusCode)
-		if result.ExitCode == 127 {
-			result.Error = types.ErrCommandNotFound
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			result.ExitCode = 1
 		}
-	}
-
-	// 获取容器日志
-	out, err := e.client.ContainerLogs(ctx, resp.ID, dockertypes.ContainerLogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Follow:     false,
-	})
-	if err != nil {
 		result.Error = err
-		result.EndTime = time.Now()
-		return result, err
-	}
-	defer out.Close()
-
-	// 创建输出缓冲区
-	var stdout, stderr strings.Builder
-
-	// 复制输出
-	_, err = stdcopy.StdCopy(&stdout, &stderr, out)
-	if err != nil {
-		result.Error = err
-		result.EndTime = time.Now()
 		return result, err
 	}
 
-	// 设置输出
-	result.Output = stdout.String()
-	if stderr.String() != "" {
-		if result.Error == nil {
-			result.Error = fmt.Errorf(stderr.String())
-		}
-	}
-
-	result.EndTime = time.Now()
-	return result, result.Error
+	return result, nil
 }
 
-// GetCommandInfo 获取命令信息。
-// 参数：
-//   - cmdName：命令名称
-//
-// 返回值：
-//   - *types.Command：命令信息
-//   - error：如果命令不存在则返回 ErrCommandNotFound
-func (e *DockerExecutor) GetCommandInfo(cmdName string) (*types.Command, error) {
-	if cmd, ok := e.commands.Load(cmdName); ok {
-		return cmd.(*types.Command), nil
-	}
-	return nil, types.ErrCommandNotFound
-}
-
-// GetCommandHelp 获取命令的帮助信息。
-// 参数：
-//   - cmdName：命令名称
-//
-// 返回值：
-//   - string：命令的使用说明
-//   - error：如果命令不存在则返回错误
-func (e *DockerExecutor) GetCommandHelp(cmdName string) (string, error) {
-	cmd, err := e.GetCommandInfo(cmdName)
-	if err != nil {
-		return "", err
-	}
-	return cmd.Usage, nil
-}
-
-// ListCommands 列出符合过滤条件的命令。
-// 参数：
-//   - filter：命令过滤器，可按类别过滤
-//
-// 返回值：
-//   - []*types.Command：符合条件的命令列表
-//   - error：列出过程中的错误
-func (e *DockerExecutor) ListCommands(filter *types.CommandFilter) ([]*types.Command, error) {
-	var commands []*types.Command
+// ListCommands 列出所有可用命令
+func (e *DockerExecutor) ListCommands() []types.CommandInfo {
+	commands := make([]types.CommandInfo, 0)
 	e.commands.Range(func(key, value interface{}) bool {
 		cmd := value.(*types.Command)
-		if filter == nil || (filter.Category == "" || filter.Category == cmd.Category) {
-			commands = append(commands, cmd)
+		info := types.CommandInfo{
+			Name:        key.(string),
+			Description: cmd.Description,
+			Usage:       cmd.Usage,
+			Category:    cmd.Category,
+			Metadata:    cmd.Metadata,
 		}
+		commands = append(commands, info)
 		return true
 	})
-	return commands, nil
+	return commands
 }
 
-// RegisterCommand 注册新命令。
-// 参数：
-//   - cmd：要注册的命令
-//
-// 返回值：
-//   - error：如果命令无效则返回错误
+// RegisterCommand 注册命令
 func (e *DockerExecutor) RegisterCommand(cmd *types.Command) error {
-	if cmd == nil || cmd.Name == "" {
-		return fmt.Errorf("invalid command")
+	if cmd == nil {
+		return fmt.Errorf("command is nil")
+	}
+	if cmd.Name == "" {
+		return fmt.Errorf("command name is empty")
+	}
+	if cmd.Handler == nil {
+		return fmt.Errorf("command handler is nil")
 	}
 	e.commands.Store(cmd.Name, cmd)
 	return nil
 }
 
-// UnregisterCommand 注销已注册的命令。
-// 参数：
-//   - cmdName：要注销的命令名称
-//
-// 返回值：
-//   - error：注销过程中的错误
+// UnregisterCommand 注销命令
 func (e *DockerExecutor) UnregisterCommand(cmdName string) error {
+	if cmdName == "" {
+		return fmt.Errorf("command name is empty")
+	}
 	e.commands.Delete(cmdName)
 	return nil
-}
-
-// makeEnvSlice 将环境变量映射转换为字符串切片。
-// 参数：
-//   - env：环境变量映射
-//
-// 返回值：
-//   - []string：格式化后的环境变量列表
-func makeEnvSlice(env map[string]string) []string {
-	if env == nil {
-		return nil
-	}
-	envSlice := make([]string, 0, len(env))
-	for k, v := range env {
-		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
-	}
-	return envSlice
-}
-
-// shellEscapeArgs 对命令参数进行 shell 转义。
-// 参数：
-//   - args：要转义的参数列表
-//
-// 返回值：
-//   - string：转义后的参数字符串
-func shellEscapeArgs(args []string) string {
-	if len(args) == 0 {
-		return ""
-	}
-	var escaped []string
-	for _, arg := range args {
-		escaped = append(escaped, fmt.Sprintf("'%s'", strings.ReplaceAll(arg, "'", "'\\''")))
-	}
-	return strings.Join(escaped, " ")
 }

@@ -54,6 +54,18 @@ type ExecuteContext struct {
 
 	// Input 是命令的输入数据
 	Input io.Reader
+
+	// IsPiped 是否是管道命令
+	IsPiped bool
+
+	// PipeInput 管道输入
+	PipeInput io.Reader
+
+	// PipeOutput 管道输出
+	PipeOutput io.Writer
+
+	// PipeContext 管道上下文
+	PipeContext *PipelineContext
 }
 
 // ExecuteResult 表示命令执行的结果。
@@ -111,31 +123,23 @@ type User struct {
 	Groups []int
 }
 
-// Command 表示一个已注册的命令。
+// Command 表示一个可执行的命令
 type Command struct {
-	// Name 是命令的名称
-	Name string
-
-	// Description 是命令的描述信息
-	Description string
-
-	// Usage 是命令的使用说明
-	Usage string
-
-	// Category 是命令的分类
-	Category string
-
-	// Handler 是命令的处理器
-	Handler CommandHandler
-
-	// Metadata 是命令的元数据
-	Metadata map[string]string
+	Name        string            // 命令名称
+	Description string            // 命令描述
+	Usage       string            // 命令用法
+	Category    string            // 命令分类
+	Metadata    map[string]string // 命令元数据
+	Handler     CommandHandler    // 命令处理器
 }
 
-// CommandHandler 定义命令处理器的接口。
-// 所有自定义命令都需要实现此接口。
+// Execute 执行命令
+func (c *Command) Execute(ctx *ExecuteContext) (*ExecuteResult, error) {
+	return c.Handler.Execute(ctx)
+}
+
+// CommandHandler 定义了命令处理器的接口
 type CommandHandler interface {
-	// Execute 执行命令并返回结果
 	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
 }
 
@@ -149,26 +153,21 @@ type CommandFilter struct {
 	Pattern string
 }
 
-// Executor 定义命令执行器的接口。
-// 提供命令执行、管理等核心功能。
+// Executor 定义了命令执行器的接口
 type Executor interface {
-	// Execute 执行指定的命令
-	Execute(ctx context.Context, cmdName string, args []string, opts *ExecuteOptions) (*ExecuteResult, error)
+	// Execute 执行命令
+	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
+	// ListCommands 列出所有可用命令
+	ListCommands() []CommandInfo
+}
 
-	// GetCommandInfo 获取命令的信息
-	GetCommandInfo(cmdName string) (*Command, error)
-
-	// GetCommandHelp 获取命令的帮助信息
-	GetCommandHelp(cmdName string) (string, error)
-
-	// ListCommands 列出符合过滤条件的命令
-	ListCommands(filter *CommandFilter) ([]*Command, error)
-
-	// RegisterCommand 注册新命令
-	RegisterCommand(cmd *Command) error
-
-	// UnregisterCommand 注销已注册的命令
-	UnregisterCommand(cmdName string) error
+// CommandInfo 表示命令信息
+type CommandInfo struct {
+	Name        string            // 命令名称
+	Description string            // 命令描述
+	Usage       string            // 命令用法
+	Category    string            // 命令分类
+	Metadata    map[string]string // 命令元数据
 }
 
 // ErrCommandNotFound 表示命令未找到
@@ -204,4 +203,17 @@ func NewExecuteError(message, code string) *ExecuteError {
 // 主要用于测试时的时间模拟
 func GetTimeNow() time.Time {
 	return time.Now()
+}
+
+// PipeCommand 表示管道命令
+type PipeCommand struct {
+	Command string   // 命令名称
+	Args    []string // 命令参数
+}
+
+// PipelineContext 表示管道上下文
+type PipelineContext struct {
+	Commands []*PipeCommand  // 管道中的命令列表
+	Options  *ExecuteOptions // 执行选项
+	Context  context.Context // 上下文
 }

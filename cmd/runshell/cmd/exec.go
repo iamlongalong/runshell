@@ -11,89 +11,103 @@ import (
 )
 
 var (
-	workDir string
-	envVars []string
+	execDockerImage string
+	execWorkDir     string
+	execEnvVars     []string
 )
 
-// execCmd represents the exec command
 var execCmd = &cobra.Command{
 	Use:   "exec [command] [args...]",
 	Short: "Execute a command",
-	Long: `Execute a command with optional environment variables and working directory.
+	Long:  `Execute a command with optional Docker container and environment variables.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("requires at least 1 arg(s), only received %d", len(args))
+		}
 
-Example:
-  runshell exec ls -l
-  runshell exec --env KEY=VALUE --workdir /tmp ls -l
-  runshell exec --docker-image ubuntu:latest ls -l`,
-	Args: cobra.MinimumNArgs(1),
-	RunE: runExec,
+		// 创建执行器
+		var exec types.Executor
+		if execDockerImage != "" {
+			exec = executor.NewDockerExecutor(execDockerImage)
+		} else {
+			exec = executor.NewLocalExecutor()
+		}
+
+		// 创建管道执行器
+		pipeExec := executor.NewPipelineExecutor(exec)
+
+		// 检查是否包含管道符
+		cmdStr := strings.Join(args, " ")
+		if strings.Contains(cmdStr, "|") {
+			// 解析管道命令
+			pipeline, err := pipeExec.ParsePipeline(cmdStr)
+			if err != nil {
+				return fmt.Errorf("failed to parse pipeline: %w", err)
+			}
+
+			// 设置执行选项
+			pipeline.Options = &types.ExecuteOptions{
+				WorkDir: execWorkDir,
+				Env:     parseEnvVars(execEnvVars),
+				Stdin:   os.Stdin,
+				Stdout:  os.Stdout,
+				Stderr:  os.Stderr,
+			}
+			pipeline.Context = cmd.Context()
+
+			// 执行管道命令
+			result, err := pipeExec.ExecutePipeline(pipeline)
+			if err != nil {
+				return fmt.Errorf("failed to execute pipeline: %w", err)
+			}
+
+			if result.ExitCode != 0 {
+				return fmt.Errorf("pipeline failed with exit code %d", result.ExitCode)
+			}
+
+			return nil
+		}
+
+		// 非管道命令的处理
+		ctx := &types.ExecuteContext{
+			Context: cmd.Context(),
+			Args:    args,
+			Options: &types.ExecuteOptions{
+				WorkDir: execWorkDir,
+				Env:     parseEnvVars(execEnvVars),
+				Stdin:   os.Stdin,
+				Stdout:  os.Stdout,
+				Stderr:  os.Stderr,
+			},
+		}
+
+		result, err := exec.Execute(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to execute command: %w", err)
+		}
+
+		if result.ExitCode != 0 {
+			return fmt.Errorf("command failed with exit code %d", result.ExitCode)
+		}
+
+		return nil
+	},
 }
 
 func init() {
 	rootCmd.AddCommand(execCmd)
-
-	execCmd.Flags().StringVar(&workDir, "workdir", "", "Working directory for command execution")
-	execCmd.Flags().StringArrayVar(&envVars, "env", nil, "Environment variables (KEY=VALUE)")
-	execCmd.Flags().StringVar(&dockerImage, "docker-image", "", "Docker image to run command in")
-
-	// 禁用标志解析，这样可以正确处理命令参数中的标志
-	execCmd.Flags().SetInterspersed(false)
+	execCmd.Flags().StringVar(&execDockerImage, "docker-image", "", "Docker image to run command in")
+	execCmd.Flags().StringVar(&execWorkDir, "workdir", "", "Working directory for command execution")
+	execCmd.Flags().StringArrayVar(&execEnvVars, "env", nil, "Environment variables (KEY=VALUE)")
 }
 
-func runExec(cmd *cobra.Command, args []string) error {
-	// 创建本地执行器
-	localExec := executor.NewLocalExecutor()
-
-	// 如果指定了 Docker 镜像，创建 Docker 执行器
-	var exec interface{} = localExec
-	if dockerImage != "" {
-		dockerExec, err := executor.NewDockerExecutor(dockerImage)
-		if err != nil {
-			return fmt.Errorf("failed to create Docker executor: %v", err)
+func parseEnvVars(vars []string) map[string]string {
+	env := make(map[string]string)
+	for _, v := range vars {
+		parts := strings.SplitN(v, "=", 2)
+		if len(parts) == 2 {
+			env[parts[0]] = parts[1]
 		}
-		exec = dockerExec
 	}
-
-	// 准备执行选项
-	opts := &types.ExecuteOptions{
-		WorkDir: workDir,
-		Env:     make(map[string]string),
-	}
-
-	// 解析环境变量
-	for _, env := range envVars {
-		key, value, found := strings.Cut(env, "=")
-		if !found {
-			return fmt.Errorf("invalid environment variable format: %s", env)
-		}
-		opts.Env[key] = value
-	}
-
-	// 执行命令
-	result, err := exec.(types.Executor).Execute(cmd.Context(), args[0], args[1:], opts)
-	if err != nil {
-		return fmt.Errorf("failed to execute command: %v", err)
-	}
-
-	// 输出结果
-	if result.Output != "" {
-		fmt.Print(result.Output)
-	}
-
-	// 如果有错误，输出到标准错误
-	if result.Error != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", result.Error)
-	}
-
-	// 如果是测试模式，返回错误而不是退出
-	if cmd.Context() != nil {
-		if result.ExitCode != 0 {
-			return fmt.Errorf("command failed with exit code %d", result.ExitCode)
-		}
-		return nil
-	}
-
-	// 使用命令的退出码退出
-	os.Exit(result.ExitCode)
-	return nil
+	return env
 }
