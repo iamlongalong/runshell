@@ -23,7 +23,8 @@ var execCmd = &cobra.Command{
 
 Example:
   runshell exec ls -l
-  runshell exec --env KEY=VALUE --workdir /tmp ls -l`,
+  runshell exec --env KEY=VALUE --workdir /tmp ls -l
+  runshell exec --docker-image ubuntu:latest ls -l`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runExec,
 }
@@ -33,6 +34,7 @@ func init() {
 
 	execCmd.Flags().StringVar(&workDir, "workdir", "", "Working directory for command execution")
 	execCmd.Flags().StringArrayVar(&envVars, "env", nil, "Environment variables (KEY=VALUE)")
+	execCmd.Flags().StringVar(&dockerImage, "docker-image", "", "Docker image to run command in")
 
 	// 禁用标志解析，这样可以正确处理命令参数中的标志
 	execCmd.Flags().SetInterspersed(false)
