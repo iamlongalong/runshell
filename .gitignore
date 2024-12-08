@@ -2,4 +2,5 @@
 .cursorrules
 /runshell
 __debug_bin*
-
+bin/
+coverage.out
