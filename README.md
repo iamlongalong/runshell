@@ -205,7 +205,7 @@ RunShell 支持以下配置选项：
 
 ## 许可证
 
-本项目采用 MIT 许��证，详见 [LICENSE](LICENSE) 文件。
+本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
 
 ## 作者
 
@@ -234,26 +234,46 @@ RunShell 支持以下配置选项：
 
 ### 版本发布
 
-要发布新版本：
+发布新版本遵循以下流程：
 
-1. 创建新的版本标签：
+1. 创建预发布（RC）版本：
    ```bash
-   make tag   # 或者手动: git tag -a v1.0.0 -m "Release v1.0.0"
+   # 创建 RC 标签
+   git tag -a v1.0.0-rc.1 -m "Release candidate 1 for version 1.0.0"
+   git push origin v1.0.0-rc.1
+   ```
+
+2. 测试预发布版本：
+   - GitHub Actions 会自动：
+     - 创建预发布 GitHub Release
+     - 构建并上传二进制文件
+     - 构建并推送 Docker RC 镜像 (`:rc` 标签)
+   - 下载并测试预发布版本
+   - 如果发现问题，修复后重复步骤 1-2，递增 RC 版本号
+
+3. 发布正式版本：
+   ```bash
+   # 创建正式版本标签
+   git tag -a v1.0.0 -m "Release version 1.0.0"
    git push origin v1.0.0
    ```
 
-2. GitHub Actions 会自动：
-   - 创建 GitHub Release
-   - 构建并上传二进制文件
-   - 构建并推送带版本标签的 Docker 镜像
+4. 自动化发布：
+   - GitHub Actions 会自动：
+     - 创建正式 GitHub Release
+     - 构建并上传二进制文件
+     - 构建并推送 Docker 镜像 (`:latest` 标签)
 
 ### Docker 镜像
 
 Docker 镜像可以从 Docker Hub 获取：
 
 ```bash
-# 使用最新版本
+# 使用最新稳定版本
 docker pull iamlongalong/runshell:latest
+
+# 使用预发布版本
+docker pull iamlongalong/runshell:rc
 
 # 使用特定版本
 docker pull iamlongalong/runshell:v1.0.0

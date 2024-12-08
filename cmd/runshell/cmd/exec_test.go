@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,14 +15,20 @@ func TestExecCommand(t *testing.T) {
 
 	// 保存原始命令状态
 	origArgs := rootCmd.Args
+	origDockerImage := dockerImage
 	defer func() {
 		rootCmd.Args = origArgs
+		dockerImage = origDockerImage
 	}()
+
+	// 在测试环境中禁用 Docker
+	dockerImage = ""
 
 	tests := []struct {
 		name    string
 		args    []string
 		wantErr bool
+		skipCI  bool // 在 CI 环境中跳过的测试
 	}{
 		{
 			name:    "no args",
@@ -30,7 +37,7 @@ func TestExecCommand(t *testing.T) {
 		},
 		{
 			name:    "valid command",
-			args:    []string{"exec", "ls", "-l"},
+			args:    []string{"exec", "echo", "test"},
 			wantErr: false,
 		},
 		{
@@ -40,7 +47,7 @@ func TestExecCommand(t *testing.T) {
 		},
 		{
 			name:    "command with workdir",
-			args:    []string{"exec", "--workdir", "/tmp", "ls", "-l"},
+			args:    []string{"exec", "--workdir", "/tmp", "echo", "test"},
 			wantErr: false,
 		},
 		{
@@ -48,10 +55,21 @@ func TestExecCommand(t *testing.T) {
 			args:    []string{"exec", "--env", "TEST=value", "env"},
 			wantErr: false,
 		},
+		{
+			name:    "docker command",
+			args:    []string{"exec", "--docker-image", "ubuntu:latest", "ls"},
+			wantErr: false,
+			skipCI:  true, // 在 CI 环境中跳过 Docker 测试
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 检查是否在 CI 环境中且需要跳过
+			if tt.skipCI && os.Getenv("CI") == "true" {
+				t.Skip("Skipping in CI environment")
+			}
+
 			// 重置命令状态
 			rootCmd.ResetFlags()
 			rootCmd.SetArgs(tt.args)

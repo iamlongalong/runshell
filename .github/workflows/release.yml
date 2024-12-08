@@ -21,6 +21,15 @@ jobs:
           go-version: '1.20'
           cache: true
 
+      - name: Check if pre-release
+        id: check_pre
+        run: |
+          if [[ ${{ github.ref }} =~ ^refs/tags/v.*-rc.* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v4
         with:
@@ -28,10 +37,12 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_PRERELEASE: ${{ steps.check_pre.outputs.is_prerelease }}
 
   docker:
     name: Release Docker
     runs-on: ubuntu-latest
+    needs: goreleaser
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -39,6 +50,17 @@ jobs:
       - name: Get version
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Check if pre-release
+        id: check_pre
+        run: |
+          if [[ ${{ github.ref }} =~ ^refs/tags/v.*-rc.* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "docker_tag=rc" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "docker_tag=latest" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -60,5 +82,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/runshell:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/runshell:${{ steps.get_version.outputs.VERSION }} 
+            ${{ secrets.DOCKERHUB_USERNAME }}/runshell:${{ steps.get_version.outputs.VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/runshell:${{ steps.check_pre.outputs.docker_tag }} 
