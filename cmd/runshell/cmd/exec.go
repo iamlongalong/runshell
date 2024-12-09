@@ -81,6 +81,7 @@ var execCmd = &cobra.Command{
 				Stdout:  os.Stdout,
 				Stderr:  os.Stderr,
 			},
+			Executor: exec,
 		}
 
 		result, err := exec.Execute(ctx)

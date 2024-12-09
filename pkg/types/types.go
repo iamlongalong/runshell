@@ -66,6 +66,9 @@ type ExecuteContext struct {
 
 	// PipeContext 管道上下文
 	PipeContext *PipelineContext
+
+	// Executor 是执行器实例
+	Executor Executor
 }
 
 // ExecuteResult 表示命令执行的结果。
@@ -173,7 +176,7 @@ type CommandInfo struct {
 	Name        string            // 命令名称
 	Description string            // 命令描述
 	Usage       string            // 命令用法
-	Category    string            // 命令分类
+	Category    string            // 命令分��
 	Metadata    map[string]string // 命令元数据
 }
 
@@ -214,7 +217,7 @@ func GetTimeNow() time.Time {
 
 // PipeCommand 表示管道命令
 type PipeCommand struct {
-	Command string   // 命���名称
+	Command string   // 命令名称
 	Args    []string // 命令参数
 }
 

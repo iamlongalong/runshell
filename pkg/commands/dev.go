@@ -2,160 +2,200 @@ package commands
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
-// GitCommand 实现 git 命令。
+// GitCommand 实现了 git 命令。
+// 用于执行 Git 版本控制操作。
 type GitCommand struct{}
 
 // Execute 执行 git 命令。
+// 参数：
+//   - 所有 git 子命令和参数
 func (c *GitCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	// 检查 git 是否安装
-	if _, err := exec.LookPath("git"); err != nil {
-		return nil, fmt.Errorf("git is not installed: %v", err)
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
 	}
 
 	// 准备命令
-	cmd := exec.CommandContext(ctx.Context, "git", ctx.Args...)
-
-	// 设置工作目录
-	if ctx.Options.WorkDir != "" {
-		// 验证工作目录是否是 git 仓库
-		if _, err := os.Stat(filepath.Join(ctx.Options.WorkDir, ".git")); err != nil {
-			return nil, fmt.Errorf("not a git repository: %v", err)
-		}
-		cmd.Dir = ctx.Options.WorkDir
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"git"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
 	}
 
-	// 设置环境变量
-	if len(ctx.Options.Env) > 0 {
-		cmd.Env = os.Environ()
-		for k, v := range ctx.Options.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
-	// 设置输入输出
-	if ctx.Options.Stdin != nil {
-		cmd.Stdin = ctx.Options.Stdin
-	}
-	if ctx.Options.Stdout != nil {
-		cmd.Stdout = ctx.Options.Stdout
-	}
-	if ctx.Options.Stderr != nil {
-		cmd.Stderr = ctx.Options.Stderr
-	}
-
-	// 执行命令
-	startTime := types.GetTimeNow()
-	err := cmd.Run()
-	endTime := types.GetTimeNow()
-
-	// 准备结果
-	result := &types.ExecuteResult{
-		CommandName: "git",
-		StartTime:   startTime,
-		EndTime:     endTime,
-	}
-
-	// 处理错误
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			result.ExitCode = 1
-		}
-		result.Error = err
-		return result, fmt.Errorf("git command failed: %v", err)
-	}
-
-	result.ExitCode = 0
-	return result, nil
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
 }
 
-// GoCommand 实现 go 命令。
+// GoCommand 实现了 go 命令。
+// 用于执行 Go 语言工具链操作。
 type GoCommand struct{}
 
 // Execute 执行 go 命令。
+// 参数：
+//   - 所有 go 子命令和参数
 func (c *GoCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	// 检查 go 是否安装
-	if _, err := exec.LookPath("go"); err != nil {
-		return nil, fmt.Errorf("go is not installed: %v", err)
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
 	}
 
 	// 准备命令
-	cmd := exec.CommandContext(ctx.Context, "go", ctx.Args...)
-
-	// 设置工作目录
-	if ctx.Options.WorkDir != "" {
-		// 验证工作目录是否包含 go.mod
-		if _, err := os.Stat(filepath.Join(ctx.Options.WorkDir, "go.mod")); err != nil {
-			return nil, fmt.Errorf("not a Go module: %v", err)
-		}
-		cmd.Dir = ctx.Options.WorkDir
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"go"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
 	}
 
-	// 设置环境变量
-	cmd.Env = os.Environ()
-	// 添加 GOPROXY 环境变量（如果没有设置）
-	if !hasEnv(cmd.Env, "GOPROXY") {
-		cmd.Env = append(cmd.Env, "GOPROXY=https://goproxy.cn,direct")
-	}
-	// 添加用户指定的环境变量
-	for k, v := range ctx.Options.Env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-	}
-
-	// 设置输入输出
-	if ctx.Options.Stdin != nil {
-		cmd.Stdin = ctx.Options.Stdin
-	}
-	if ctx.Options.Stdout != nil {
-		cmd.Stdout = ctx.Options.Stdout
-	}
-	if ctx.Options.Stderr != nil {
-		cmd.Stderr = ctx.Options.Stderr
-	}
-
-	// 执行命令
-	startTime := types.GetTimeNow()
-	err := cmd.Run()
-	endTime := types.GetTimeNow()
-
-	// 准备结果
-	result := &types.ExecuteResult{
-		CommandName: "go",
-		StartTime:   startTime,
-		EndTime:     endTime,
-	}
-
-	// 处理错误
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			result.ExitCode = 1
-		}
-		result.Error = err
-		return result, fmt.Errorf("go command failed: %v", err)
-	}
-
-	result.ExitCode = 0
-	return result, nil
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
 }
 
-// hasEnv 检查环境变量列表中是否包含指定的变量。
-func hasEnv(env []string, key string) bool {
-	prefix := key + "="
-	for _, e := range env {
-		if strings.HasPrefix(e, prefix) {
-			return true
-		}
+// PythonCommand 实现了 python 命令。
+// 用于执行 Python 解释器和脚本。
+type PythonCommand struct{}
+
+// Execute 执行 python 命令。
+// 参数：
+//   - [script]：要执行的 Python 脚本文件
+//   - [args...]：传递给脚本的参数
+func (c *PythonCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
 	}
-	return false
+
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("python: missing operand")
+	}
+
+	// 准备命令
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"python3"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
+}
+
+// PipCommand 实现了 pip 命令。
+// 用于管理 Python 包。
+type PipCommand struct{}
+
+// Execute 执行 pip 命令。
+// 参数：
+//   - install/uninstall：安装或卸载包
+//   - [package]：包名
+//   - [-r requirements.txt]：从文件安装依赖
+func (c *PipCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
+	}
+
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("pip: missing operand")
+	}
+
+	// 准备命令
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"pip"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
+}
+
+// DockerCommand 实现了 docker 命令。
+// 用于管理容器和镜像。
+type DockerCommand struct{}
+
+// Execute 执行 docker 命令。
+// 参数：
+//   - 所有 docker 子命令和参数
+func (c *DockerCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
+	}
+
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("docker: missing operand")
+	}
+
+	// 准备命令
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"docker"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
+}
+
+// NodeCommand 实现了 node 命令。
+// 用于执行 Node.js 解释器和脚本。
+type NodeCommand struct{}
+
+// Execute 执行 node 命令。
+// 参数：
+//   - [script]：要执行的 JavaScript 文件
+//   - [args...]：传递给脚本的参数
+func (c *NodeCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
+	}
+
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("node: missing operand")
+	}
+
+	// 准备命令
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"node"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
+}
+
+// NPMCommand 实现了 npm 命令。
+// 用于管理 Node.js 包。
+type NPMCommand struct{}
+
+// Execute 执行 npm 命令。
+// 参数：
+//   - install/uninstall：安装或卸载包
+//   - [package]：包名
+//   - [-g]：全局安装
+func (c *NPMCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is required")
+	}
+
+	if len(ctx.Args) == 0 {
+		return nil, fmt.Errorf("npm: missing operand")
+	}
+
+	// 准备命令
+	execCtx := &types.ExecuteContext{
+		Context:  ctx.Context,
+		Args:     append([]string{"npm"}, ctx.Args...),
+		Options:  ctx.Options,
+		Executor: ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(execCtx)
 }

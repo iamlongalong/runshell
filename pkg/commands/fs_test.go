@@ -2,294 +2,431 @@ package commands
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
-	"strings"
+	"context"
 	"testing"
-	"time"
 
+	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
+	"github.com/stretchr/testify/assert"
 )
 
-// TestLSCommand 测试 ls 命令的功能。
-// 测试场景：
-// 1. 创建临时目录和测试文件
-// 2. 执行 ls 命令列出目录内容
-// 3. 验证输出中包含所有测试文件
 func TestLSCommand(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "ls-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// 创建测试文件
-	testFiles := []string{"file1.txt", "file2.txt"}
-	for _, file := range testFiles {
-		if err := os.WriteFile(filepath.Join(tempDir, file), []byte("test"), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// 执行命令
-	cmd := &LSCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Args: []string{tempDir},
-		Options: &types.ExecuteOptions{
-			WorkDir: ".",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name    string
+		args    []string
+		files   map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "ls current dir",
+			args:    []string{},
+			files:   map[string]string{"file1.txt": "content1", "file2.txt": "content2"},
+			wantErr: false,
 		},
-		StartTime: time.Now(),
-	})
-
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("LSCommand.Execute() error = %v", err)
+		{
+			name:    "ls with path",
+			args:    []string{"/test"},
+			files:   map[string]string{"/test/file1.txt": "content1", "/test/file2.txt": "content2"},
+			wantErr: false,
+		},
+		{
+			name:    "ls non-existent dir",
+			args:    []string{"/nonexistent"},
+			files:   map[string]string{},
+			wantErr: true,
+		},
 	}
-	if result.ExitCode != 0 {
-		t.Errorf("LSCommand.Execute() exit code = %v, want 0", result.ExitCode)
-	}
 
-	// 验证输出内容
-	output := stdout.String()
-	for _, file := range testFiles {
-		if !strings.Contains(output, file) {
-			t.Errorf("LSCommand.Execute() output does not contain %q", file)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &LSCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				assert.NotEmpty(t, stdout.String())
+			}
+		})
 	}
 }
 
-// TestCatCommand 测试 cat 命令的功能。
-// 测试场景：
-// 1. 创建临时文件并写入测试内容
-// 2. 执行 cat 命令读取文件内容
-// 3. 验证输出内容是否正确
 func TestCatCommand(t *testing.T) {
-	// 创建临时测试文件
-	tempFile, err := os.CreateTemp("", "cat-test-*.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	// 写入测试内容
-	content := "test content"
-	if _, err := tempFile.Write([]byte(content)); err != nil {
-		t.Fatal(err)
-	}
-	tempFile.Close()
-
-	// 执行命令
-	cmd := &CatCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Args: []string{tempFile.Name()},
-		Options: &types.ExecuteOptions{
-			WorkDir: ".",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name     string
+		args     []string
+		files    map[string]string
+		wantErr  bool
+		wantText string
+	}{
+		{
+			name:     "cat existing file",
+			args:     []string{"test.txt"},
+			files:    map[string]string{"test.txt": "test content"},
+			wantErr:  false,
+			wantText: "test content",
 		},
-		StartTime: time.Now(),
-	})
+		{
+			name:    "cat non-existent file",
+			args:    []string{"nonexistent.txt"},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+		{
+			name:    "cat without args",
+			args:    []string{},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+	}
 
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("CatCommand.Execute() error = %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Errorf("CatCommand.Execute() exit code = %v, want 0", result.ExitCode)
-	}
-	if got := stdout.String(); got != content {
-		t.Errorf("CatCommand.Execute() output = %q, want %q", got, content)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &CatCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				assert.Equal(t, tt.wantText, stdout.String())
+			}
+		})
 	}
 }
 
-// TestMkdirCommand 测试 mkdir 命令的功能。
-// 测试场景：
-// 1. 在临时目录中创建新目录
-// 2. 验证目录是否成功创建
-// 3. 检查目录权限和存在性
 func TestMkdirCommand(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "mkdir-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// 设置新目录路径
-	newDir := filepath.Join(tempDir, "newdir")
-	cmd := &MkdirCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	// 执行命令
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Args: []string{newDir},
-		Options: &types.ExecuteOptions{
-			WorkDir: ".",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name    string
+		args    []string
+		files   map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "mkdir new directory",
+			args:    []string{"newdir"},
+			files:   map[string]string{},
+			wantErr: false,
 		},
-		StartTime: time.Now(),
-	})
-
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("MkdirCommand.Execute() error = %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Errorf("MkdirCommand.Execute() exit code = %v, want 0", result.ExitCode)
+		{
+			name:    "mkdir without args",
+			args:    []string{},
+			files:   map[string]string{},
+			wantErr: true,
+		},
 	}
 
-	// 验证目录是否创建成功
-	if _, err := os.Stat(newDir); os.IsNotExist(err) {
-		t.Error("MkdirCommand.Execute() directory was not created")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &MkdirCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				if len(tt.args) > 0 {
+					_, exists := mockExec.ReadFile(tt.args[0])
+					assert.True(t, exists, "Directory was not created")
+				}
+			}
+		})
 	}
 }
 
-// TestRmCommand 测试 rm 命令的功能。
-// 测试场景：
-// 1. 创建测试文件
-// 2. 执行 rm 命令删除文件
-// 3. 验证文件是否成功删除
 func TestRmCommand(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "rm-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// 创建测试文件
-	testFile := filepath.Join(tempDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// 执行命令
-	cmd := &RmCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Args: []string{testFile},
-		Options: &types.ExecuteOptions{
-			WorkDir: ".",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name    string
+		args    []string
+		files   map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "rm existing file",
+			args:    []string{"test.txt"},
+			files:   map[string]string{"test.txt": "content"},
+			wantErr: false,
 		},
-		StartTime: time.Now(),
-	})
-
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("RmCommand.Execute() error = %v", err)
+		{
+			name:    "rm non-existent file",
+			args:    []string{"nonexistent.txt"},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+		{
+			name:    "rm without args",
+			args:    []string{},
+			files:   map[string]string{},
+			wantErr: true,
+		},
 	}
-	if result.ExitCode != 0 {
-		t.Errorf("RmCommand.Execute() exit code = %v, want 0", result.ExitCode)
-	}
 
-	// 验证文件是否已删除
-	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
-		t.Error("RmCommand.Execute() file was not removed")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &RmCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				if len(tt.args) > 0 {
+					_, exists := mockExec.ReadFile(tt.args[0])
+					assert.False(t, exists, "File was not removed")
+				}
+			}
+		})
 	}
 }
 
-// TestCpCommand 测试 cp 命令的功能。
-// 测试场景：
-// 1. 创建源文件并写入测试内容
-// 2. 执行 cp 命令复制文件
-// 3. 验证目标文件内容是否与源文件一致
 func TestCpCommand(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "cp-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// 创建并写入源文件
-	srcFile := filepath.Join(tempDir, "src.txt")
-	content := "test content"
-	if err := os.WriteFile(srcFile, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// 设置目标文件路径
-	dstFile := filepath.Join(tempDir, "dst.txt")
-
-	// 执行命令
-	cmd := &CpCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Args: []string{srcFile, dstFile},
-		Options: &types.ExecuteOptions{
-			WorkDir: ".",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name    string
+		args    []string
+		files   map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "cp existing file",
+			args:    []string{"src.txt", "dst.txt"},
+			files:   map[string]string{"src.txt": "test content"},
+			wantErr: false,
 		},
-		StartTime: time.Now(),
-	})
+		{
+			name:    "cp non-existent file",
+			args:    []string{"nonexistent.txt", "dst.txt"},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+		{
+			name:    "cp without args",
+			args:    []string{},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+	}
 
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("CpCommand.Execute() error = %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Errorf("CpCommand.Execute() exit code = %v, want 0", result.ExitCode)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &CpCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
 
-	// 验证文件内容
-	dstContent, err := os.ReadFile(dstFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(dstContent) != content {
-		t.Errorf("CpCommand.Execute() copied content = %q, want %q", string(dstContent), content)
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				if len(tt.args) >= 2 {
+					srcContent, _ := mockExec.ReadFile(tt.args[0])
+					dstContent, exists := mockExec.ReadFile(tt.args[1])
+					assert.True(t, exists, "Destination file was not created")
+					assert.Equal(t, srcContent, dstContent, "File content mismatch")
+				}
+			}
+		})
 	}
 }
 
-// TestPWDCommand 测试 pwd 命令的功能。
-// 测试场景：
-// 1. 设置工作目录
-// 2. 执行 pwd 命令
-// 3. 验证输出的工作目录路径是否正确
 func TestPWDCommand(t *testing.T) {
-	// 执行命令
-	cmd := &PWDCommand{}
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-
-	result, err := cmd.Execute(&types.ExecuteContext{
-		Options: &types.ExecuteOptions{
-			WorkDir: "/test/dir",
-			Stdout:  stdout,
-			Stderr:  stderr,
+	tests := []struct {
+		name    string
+		workDir string
+		wantErr bool
+	}{
+		{
+			name:    "pwd in existing dir",
+			workDir: "/test/dir",
+			wantErr: false,
 		},
-		StartTime: time.Now(),
-	})
-
-	// 验证执行结果
-	if err != nil {
-		t.Errorf("PWDCommand.Execute() error = %v", err)
-	}
-	if result.ExitCode != 0 {
-		t.Errorf("PWDCommand.Execute() exit code = %v, want 0", result.ExitCode)
 	}
 
-	// 验证输出路径
-	got := strings.TrimSpace(stdout.String())
-	if got != "/test/dir" {
-		t.Errorf("PWDCommand.Execute() output = %q, want %q", got, "/test/dir")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &PWDCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     []string{},
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					WorkDir: tt.workDir,
+					Stdout:  stdout,
+					Stderr:  stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				assert.Equal(t, tt.workDir+"\n", stdout.String())
+			}
+		})
+	}
+}
+
+func TestReadFileCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		files   map[string]string
+		wantErr bool
+	}{
+		{
+			name:    "no args",
+			args:    []string{},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+		{
+			name:    "invalid start line",
+			args:    []string{"test.txt", "-1", "1"},
+			files:   map[string]string{"test.txt": "line1\nline2\nline3"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid end line",
+			args:    []string{"test.txt", "1", "-1"},
+			files:   map[string]string{"test.txt": "line1\nline2\nline3"},
+			wantErr: true,
+		},
+		{
+			name:    "start line > end line",
+			args:    []string{"test.txt", "2", "1"},
+			files:   map[string]string{"test.txt": "line1\nline2\nline3"},
+			wantErr: true,
+		},
+		{
+			name:    "file not found",
+			args:    []string{"nonexistent.txt", "1", "1"},
+			files:   map[string]string{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &ReadFileCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			mockExec := executor.NewMockExecutor()
+			for path, content := range tt.files {
+				mockExec.WriteFile(path, content)
+			}
+
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+			}
+		})
 	}
 }

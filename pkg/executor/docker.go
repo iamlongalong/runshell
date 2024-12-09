@@ -98,7 +98,7 @@ func (e *DockerExecutor) ensureContainer() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	// 如果容���已存在，检查其状态
+	// 如果容器已存在，检查其状态
 	if e.containerID != "" {
 		cmd := exec.Command("docker", dockerCmdInspect, dockerOptForce, "{{.State.Running}}", e.containerID)
 		output, err := cmd.CombinedOutput()
@@ -192,6 +192,20 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 	// 检查是否内置命令
 	if cmd, ok := e.commands.Load(ctx.Args[0]); ok {
 		command := cmd.(*types.Command)
+		// 如果没有设置工作目录，使用配置中的工作目录
+		if ctx.Options == nil {
+			ctx.Options = &types.ExecuteOptions{}
+		}
+		if ctx.Options.WorkDir == "" && e.config.WorkDir != "" {
+			ctx.Options.WorkDir = e.config.WorkDir
+		}
+
+		// 确保容器运行
+		if err := e.ensureContainer(); err != nil {
+			return nil, fmt.Errorf("failed to ensure container: %v", err)
+		}
+
+		// 执行内置命令
 		return command.Execute(ctx)
 	}
 

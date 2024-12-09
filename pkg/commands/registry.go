@@ -173,6 +173,13 @@ func RegisterCommands(executor types.Executor) error {
 			Category:    "language",
 			Handler:     &GoCommand{},
 		},
+		{
+			Name:        "readfile",
+			Description: "Read file content from specified line range",
+			Usage:       "readfile [file] [start_line] [end_line]",
+			Category:    "file",
+			Handler:     &ReadFileCommand{},
+		},
 	}
 
 	// 注册所有命令

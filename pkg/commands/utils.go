@@ -4,18 +4,12 @@ package commands
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -136,33 +130,27 @@ func (c *FindCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return result, result.Error
 	}
 
-	path := ctx.Args[0]
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(ctx.Options.WorkDir, path)
-	}
-
-	var pattern string
+	// 构建find命令的参数
+	args := []string{"find", ctx.Args[0]}
 	if len(ctx.Args) > 1 {
-		pattern = ctx.Args[1]
+		args = append(args, "-name", ctx.Args[1])
 	}
 
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if pattern == "" || strings.Contains(info.Name(), pattern) {
-			fmt.Fprintln(ctx.Options.Stdout, path)
-		}
-		return nil
-	})
-
-	if err != nil {
-		result.Error = err
-		return result, err
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
+		StartTime:   ctx.StartTime,
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
 	}
 
-	return result, nil
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // GrepCommand 实现了 'grep' 命令。
@@ -189,44 +177,25 @@ func (c *GrepCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return result, result.Error
 	}
 
-	pattern := ctx.Args[0]
-	files := ctx.Args[1:]
+	// 构建grep命令的参数
+	args := []string{"grep", "-n", ctx.Args[0]}
+	args = append(args, ctx.Args[1:]...)
 
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		result.Error = err
-		return result, err
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
+		StartTime:   ctx.StartTime,
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
 	}
 
-	for _, file := range files {
-		if !filepath.IsAbs(file) {
-			file = filepath.Join(ctx.Options.WorkDir, file)
-		}
-
-		f, err := os.Open(file)
-		if err != nil {
-			result.Error = err
-			return result, err
-		}
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-		lineNum := 1
-		for scanner.Scan() {
-			line := scanner.Text()
-			if re.MatchString(line) {
-				fmt.Fprintf(ctx.Options.Stdout, "%s:%d:%s\n", file, lineNum, line)
-			}
-			lineNum++
-		}
-
-		if err := scanner.Err(); err != nil {
-			result.Error = err
-			return result, err
-		}
-	}
-
-	return result, nil
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // TailCommand 实现了 'tail' 命令。
@@ -253,49 +222,30 @@ func (c *TailCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return result, result.Error
 	}
 
-	lines := 10 // 默认显示最后10行
-	path := ctx.Args[0]
-
+	// 构建tail命令的参数
+	args := []string{"tail"}
 	if len(ctx.Args) > 1 && strings.HasPrefix(ctx.Args[0], "-n") {
-		fmt.Sscanf(ctx.Args[0][2:], "%d", &lines)
-		path = ctx.Args[1]
+		args = append(args, ctx.Args[0])
+		args = append(args, ctx.Args[1])
+	} else {
+		args = append(args, "-n", "10", ctx.Args[0])
 	}
 
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(ctx.Options.WorkDir, path)
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
+		StartTime:   ctx.StartTime,
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		result.Error = err
-		return result, err
-	}
-	defer f.Close()
-
-	// 读取文件到缓冲区
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, f)
-	if err != nil {
-		result.Error = err
-		return result, err
-	}
-
-	// 分割成行
-	content := buf.String()
-	allLines := strings.Split(content, "\n")
-
-	// 计算要显示的行数
-	start := len(allLines) - lines
-	if start < 0 {
-		start = 0
-	}
-
-	// 输出最后几行
-	for _, line := range allLines[start:] {
-		fmt.Fprintln(ctx.Options.Stdout, line)
-	}
-
-	return result, nil
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // XargsCommand 实现了 'xargs' 命令。
@@ -387,18 +337,31 @@ func (c *SeedCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 // MvCommand implements mv command
 type MvCommand struct{}
 
+// Execute 执行 mv 命令。
 func (c *MvCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if len(ctx.Args) != 2 {
 		return nil, fmt.Errorf("mv requires source and destination arguments")
 	}
-	err := os.Rename(ctx.Args[0], ctx.Args[1])
-	return &types.ExecuteResult{
-		CommandName: "mv",
-		ExitCode:    0,
+
+	// 构建mv命令的参数
+	args := []string{"mv"}
+	args = append(args, ctx.Args...)
+
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
 		StartTime:   ctx.StartTime,
-		EndTime:     time.Now(),
-		Error:       err,
-	}, nil
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // HeadCommand implements head command
@@ -409,36 +372,29 @@ func (c *HeadCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("head requires a file argument")
 	}
 
-	lines := 10 // default lines
-	filename := ctx.Args[0]
-
+	// 构建head命令的参数
+	args := []string{"head"}
 	if len(ctx.Args) > 2 && ctx.Args[0] == "-n" {
-		var err error
-		if lines, err = strconv.Atoi(ctx.Args[1]); err != nil {
-			return nil, fmt.Errorf("invalid line count: %v", err)
-		}
-		filename = ctx.Args[2]
+		args = append(args, "-n", ctx.Args[1], ctx.Args[2])
+	} else {
+		args = append(args, "-n", "10", ctx.Args[0])
 	}
 
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	var output strings.Builder
-	for i := 0; i < lines && scanner.Scan(); i++ {
-		output.WriteString(scanner.Text() + "\n")
-	}
-
-	return &types.ExecuteResult{
-		CommandName: "head",
-		ExitCode:    0,
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
 		StartTime:   ctx.StartTime,
-		EndTime:     time.Now(),
-		Output:      output.String(),
-	}, nil
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // SortCommand implements sort command
@@ -449,28 +405,25 @@ func (c *SortCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("sort requires a file argument")
 	}
 
-	file, err := os.Open(ctx.Args[0])
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
+	// 构建sort命令的参数
+	args := []string{"sort"}
+	args = append(args, ctx.Args...)
 
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	sort.Strings(lines)
-	output := strings.Join(lines, "\n") + "\n"
-
-	return &types.ExecuteResult{
-		CommandName: "sort",
-		ExitCode:    0,
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
 		StartTime:   ctx.StartTime,
-		EndTime:     time.Now(),
-		Output:      output,
-	}, nil
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // UniqCommand implements uniq command
@@ -600,30 +553,31 @@ func (c *IfconfigCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 // CurlCommand implements curl command
 type CurlCommand struct{}
 
+// Execute 执行 curl 命令。
 func (c *CurlCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if len(ctx.Args) < 1 {
 		return nil, fmt.Errorf("curl requires a URL argument")
 	}
 
-	url := ctx.Args[0]
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	// 构建curl命令的参数
+	args := []string{"curl"}
+	args = append(args, ctx.Args...)
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.ExecuteResult{
-		CommandName: "curl",
-		ExitCode:    resp.StatusCode,
+	// 创建新的执行上下文
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Args:        args,
+		Options:     ctx.Options,
 		StartTime:   ctx.StartTime,
-		EndTime:     time.Now(),
-		Output:      string(body),
-	}, nil
+		IsPiped:     ctx.IsPiped,
+		PipeInput:   ctx.PipeInput,
+		PipeOutput:  ctx.PipeOutput,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
+	}
+
+	// 通过executor执行命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // SedCommand implements sed command
@@ -673,6 +627,7 @@ func (c *PipeCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		Options:   ctx.Options,
 		StartTime: time.Now(),
 		Input:     strings.NewReader(leftResult.Output),
+		Executor:  ctx.Executor,
 	}
 
 	// 执行右侧命令

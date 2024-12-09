@@ -1,12 +1,15 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -55,6 +58,7 @@ func TestGitCommand(t *testing.T) {
 	}
 
 	// 执行测试
+	mockExec := &executor.LocalExecutor{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &GitCommand{}
@@ -63,8 +67,9 @@ func TestGitCommand(t *testing.T) {
 				workDir = os.TempDir()
 			}
 			ctx := &types.ExecuteContext{
-				Context: context.Background(),
-				Args:    tt.args,
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					WorkDir: workDir,
 				},
@@ -130,12 +135,14 @@ func TestGoCommand(t *testing.T) {
 	}
 
 	// 执行测试
+	ex := &executor.LocalExecutor{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &GoCommand{}
 			ctx := &types.ExecuteContext{
-				Context: context.Background(),
-				Args:    tt.args,
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: ex,
 				Options: &types.ExecuteOptions{
 					WorkDir: tt.workDir,
 					Env:     tt.env,
@@ -182,8 +189,82 @@ func TestHasEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasEnv(tt.env, tt.key)
+			result := false
+			for _, e := range tt.env {
+				if strings.HasPrefix(e, tt.key+"=") {
+					result = true
+					break
+				}
+			}
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestPythonCommand(t *testing.T) {
+	// Create temporary directory
+	tempDir, err := os.MkdirTemp("", "python-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create a test Python script
+	scriptContent := []byte("print('Hello, World!')")
+	scriptPath := filepath.Join(tempDir, "script.py")
+	if err := os.WriteFile(scriptPath, scriptContent, 0644); err != nil {
+		t.Fatalf("Failed to create test script: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{
+			name:    "python version",
+			args:    []string{"--version"},
+			wantErr: false,
+		},
+		{
+			name:    "run script",
+			args:    []string{scriptPath},
+			wantErr: false,
+		},
+		{
+			name:    "no args",
+			args:    []string{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &PythonCommand{}
+			stdout := &bytes.Buffer{}
+			stderr := &bytes.Buffer{}
+
+			ex := &executor.LocalExecutor{}
+			ctx := &types.ExecuteContext{
+				Context:  context.Background(),
+				Args:     tt.args,
+				Executor: ex,
+				Options: &types.ExecuteOptions{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+			}
+
+			result, err := cmd.Execute(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, 0, result.ExitCode)
+				if tt.args[0] == "--version" {
+					assert.Contains(t, stdout.String(), "Python")
+				}
+			}
 		})
 	}
 }

@@ -74,10 +74,11 @@ func (e *PipelineExecutor) ExecutePipeline(pipeline *types.PipelineContext) (*ty
 	for i, cmd := range pipeline.Commands {
 		// 创建命令上下文
 		ctx := &types.ExecuteContext{
-			Context: pipeline.Context,
-			Args:    append([]string{cmd.Command}, cmd.Args...),
-			Options: pipeline.Options,
-			IsPiped: true,
+			Context:  pipeline.Context,
+			Args:     append([]string{cmd.Command}, cmd.Args...),
+			Options:  pipeline.Options,
+			IsPiped:  true,
+			Executor: e.executor,
 		}
 
 		// 设置管道

@@ -171,9 +171,10 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 
 	// 执行命令
 	execCtx := &types.ExecuteContext{
-		Context: r.Context(),
-		Args:    append([]string{req.Command}, req.Args...),
-		Options: opts,
+		Context:  r.Context(),
+		Args:     append([]string{req.Command}, req.Args...),
+		Options:  opts,
+		Executor: s.executor,
 	}
 
 	result, err := s.executor.Execute(execCtx)
@@ -321,9 +322,10 @@ func (s *Server) handleSessionOperations(w http.ResponseWriter, r *http.Request)
 
 		// 执行命令
 		execCtx := &types.ExecuteContext{
-			Context: r.Context(),
-			Args:    append([]string{req.Command}, req.Args...),
-			Options: opts,
+			Context:  r.Context(),
+			Args:     append([]string{req.Command}, req.Args...),
+			Options:  opts,
+			Executor: session.Executor,
 		}
 
 		result, err := session.Executor.Execute(execCtx)
