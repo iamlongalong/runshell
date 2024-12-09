@@ -10,7 +10,9 @@ import (
 
 func TestDockerExecutor(t *testing.T) {
 	// 创建 Docker 执行器
-	exec := NewDockerExecutor("alpine:latest")
+	exec := NewDockerExecutor(DockerConfig{
+		Image: "alpine:latest",
+	})
 
 	// 测试执行命令
 	ctx := &types.ExecuteContext{
@@ -33,7 +35,10 @@ func TestDockerExecutor(t *testing.T) {
 
 func TestDockerExecutorWithWorkDir(t *testing.T) {
 	// 创建 Docker 执行器
-	exec := NewDockerExecutor("alpine:latest")
+	exec := NewDockerExecutor(DockerConfig{
+		Image:   "alpine:latest",
+		WorkDir: "/tmp",
+	})
 
 	// 测试执行命令
 	ctx := &types.ExecuteContext{
@@ -54,7 +59,10 @@ func TestDockerExecutorWithWorkDir(t *testing.T) {
 
 func TestDockerExecutorWithEnv(t *testing.T) {
 	// 创建 Docker 执行器
-	exec := NewDockerExecutor("alpine:latest")
+	exec := NewDockerExecutor(DockerConfig{
+		Image:   "alpine:latest",
+		WorkDir: "/tmp",
+	})
 
 	// 测试执行命令
 	ctx := &types.ExecuteContext{

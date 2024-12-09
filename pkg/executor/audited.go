@@ -21,6 +21,11 @@ func NewAuditedExecutor(executor types.Executor, auditor *audit.Auditor) *Audite
 	}
 }
 
+// SetOptions 设置执行选项
+func (e *AuditedExecutor) SetOptions(options *types.ExecuteOptions) {
+	e.executor.SetOptions(options)
+}
+
 // Execute 执行命令并记录审计日志
 func (e *AuditedExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	// 记录开始执行
@@ -50,4 +55,17 @@ func (e *AuditedExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 // ListCommands 列出所有可用命令
 func (e *AuditedExecutor) ListCommands() []types.CommandInfo {
 	return e.executor.ListCommands()
+}
+
+// Close 关闭执行器，清理资源
+func (e *AuditedExecutor) Close() error {
+	// 记录关闭事件
+	e.auditor.LogCommandExecution(&audit.CommandExecution{
+		Command: "close",
+		Status:  "completed",
+		EndTime: types.GetTimeNow(),
+	})
+
+	// 关闭底层执行器
+	return e.executor.Close()
 }

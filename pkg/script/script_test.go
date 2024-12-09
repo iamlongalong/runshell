@@ -4,29 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockExecutor 模拟执行器
-type MockExecutor struct {
-	executeFunc func(ctx *types.ExecuteContext) (*types.ExecuteResult, error)
-}
-
-func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if m.executeFunc != nil {
-		return m.executeFunc(ctx)
-	}
-	return &types.ExecuteResult{}, nil
-}
-
-func (m *MockExecutor) ListCommands() []types.CommandInfo {
-	return nil
-}
-
 func TestScriptManager(t *testing.T) {
 	// 创建模拟执行器
-	mockExec := &MockExecutor{}
+	mockExec := &executor.MockExecutor{}
 
 	// 创建脚本管理器
 	sm := NewScriptManager(mockExec)
@@ -59,7 +44,7 @@ func TestScriptManager(t *testing.T) {
 
 	// 测试执行脚本
 	executed := false
-	mockExec.executeFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	mockExec.ExecuteFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 		executed = true
 		assert.Equal(t, script.Command, ctx.Args[0])
 		assert.Equal(t, script.Args, ctx.Args[1:])

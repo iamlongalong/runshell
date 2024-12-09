@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/iamlongalong/runshell/pkg/types"
@@ -39,31 +40,21 @@ type ExecResponse struct {
 // - 优雅关闭
 // - 线程安全
 type Server struct {
-	executor types.Executor
-	server   *http.Server
-	mux      *http.ServeMux
-	listener net.Listener
-	mu       sync.Mutex
-	buf      bytes.Buffer
-	started  bool
-	addr     string
+	executor       types.Executor
+	sessionManager types.SessionManager
+	addr           string
+	server         *http.Server
+	listener       net.Listener
+	mu             sync.Mutex
 }
 
 // NewServer 创建新的服务器
 func NewServer(executor types.Executor, addr string) *Server {
-	s := &Server{
-		executor: executor,
-		mux:      http.NewServeMux(),
-		addr:     addr,
+	return &Server{
+		executor:       executor,
+		sessionManager: NewMemorySessionManager(),
+		addr:           addr,
 	}
-
-	// 注册路由
-	s.mux.HandleFunc("/health", s.handleHealth)
-	s.mux.HandleFunc("/exec", s.handleExec)
-	s.mux.HandleFunc("/commands", s.handleListCommands)
-	s.mux.HandleFunc("/help", s.handleCommandHelp)
-
-	return s
 }
 
 // Start 启动服务器
@@ -71,15 +62,20 @@ func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.started {
-		return fmt.Errorf("server already started")
+	if s.server != nil {
+		return fmt.Errorf("server is already running")
 	}
 
-	// 创建 HTTP 服务器
-	s.server = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
-	}
+	// 创建路由
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/exec", s.handleExec)
+	mux.HandleFunc("/commands", s.handleListCommands)
+	mux.HandleFunc("/help", s.handleCommandHelp)
+
+	// 会话管理路由
+	mux.HandleFunc("/sessions", s.handleSessions)
+	mux.HandleFunc("/sessions/", s.handleSessionOperations)
 
 	// 创建监听器
 	fmt.Printf("Creating listener for %s\n", s.addr)
@@ -90,11 +86,13 @@ func (s *Server) Start() error {
 	fmt.Printf("Listener created successfully for %s\n", s.addr)
 
 	s.listener = listener
-	s.started = true
+	s.server = &http.Server{
+		Handler: mux,
+	}
 
-	// 在后台启动服务器
+	// 启动服务器
+	fmt.Printf("Starting server on %s\n", s.addr)
 	go func() {
-		fmt.Printf("Starting server on %s\n", s.addr)
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("Server error: %v\n", err)
 		}
@@ -108,25 +106,22 @@ func (s *Server) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.started {
+	if s.server == nil {
 		return nil
 	}
 
+	// 关闭所有会话
+	sessions, _ := s.sessionManager.ListSessions()
+	for _, session := range sessions {
+		s.sessionManager.DeleteSession(session.ID)
+	}
+
 	// 关闭服务器
-	if s.server != nil {
-		if err := s.server.Shutdown(context.Background()); err != nil {
-			return fmt.Errorf("failed to shutdown server: %w", err)
-		}
+	if err := s.server.Shutdown(context.Background()); err != nil {
+		return fmt.Errorf("failed to shutdown server: %w", err)
 	}
 
-	// 关闭监听器
-	if s.listener != nil {
-		if err := s.listener.Close(); err != nil {
-			return fmt.Errorf("failed to close listener: %w", err)
-		}
-	}
-
-	s.started = false
+	s.server = nil
 	return nil
 }
 
@@ -226,6 +221,149 @@ func (s *Server) handleCommandHelp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(help))
+}
+
+// handleSessions 处理会话管理请求
+func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodPost:
+		// 创建新会话
+		var req types.SessionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
+
+		// 创建执行器
+		executor, err := CreateExecutor(&req)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
+
+		// 创建会话
+		session, err := s.sessionManager.CreateSession(executor, req.Options)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+
+		// 返回会话信息
+		resp := types.SessionResponse{Session: session}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+
+	case http.MethodGet:
+		// 列出所有会话
+		sessions, err := s.sessionManager.ListSessions()
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(sessions); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+
+	default:
+		http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSessionOperations 处理会话操作请求
+func (s *Server) handleSessionOperations(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 获取会话ID
+	sessionID := strings.TrimPrefix(r.URL.Path, "/sessions/")
+	if sessionID == "" {
+		http.Error(w, `{"error": "session ID is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// 获取会话
+	session, err := s.sessionManager.GetSession(sessionID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusNotFound)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		// 解析请求
+		var req struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+			WorkDir string   `json:"workdir"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			return
+		}
+
+		// 准备执行选项
+		opts := &types.ExecuteOptions{
+			WorkDir: req.WorkDir,
+		}
+
+		if session.Options != nil && session.Options.Env != nil {
+			opts.Env = session.Options.Env
+		}
+
+		// 创建输出缓冲区
+		var stdout, stderr bytes.Buffer
+		opts.Stdout = &stdout
+		opts.Stderr = &stderr
+
+		// 执行命令
+		execCtx := &types.ExecuteContext{
+			Context: r.Context(),
+			Args:    append([]string{req.Command}, req.Args...),
+			Options: opts,
+		}
+
+		result, err := session.Executor.Execute(execCtx)
+		if err != nil {
+			// 准备错误响应
+			response := struct {
+				Error  string `json:"error"`
+				Output string `json:"output"`
+			}{
+				Error:  err.Error(),
+				Output: stdout.String() + stderr.String(),
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// 准备成功响应
+		response := struct {
+			types.ExecuteResult
+			Output string `json:"output"`
+		}{
+			ExecuteResult: *result,
+			Output:        stdout.String() + stderr.String(),
+		}
+
+		// 返回结果
+		json.NewEncoder(w).Encode(response)
+
+	case http.MethodDelete:
+		// 删除会话
+		if err := s.sessionManager.DeleteSession(sessionID); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+	}
 }
 
 // StreamScanner helps to scan streaming output

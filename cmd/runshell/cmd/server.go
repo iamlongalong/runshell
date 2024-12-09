@@ -28,7 +28,9 @@ var serverCmd = &cobra.Command{
 		// 创建执行器
 		var exec types.Executor
 		if dockerImage != "" {
-			exec = executor.NewDockerExecutor(dockerImage)
+			exec = executor.NewDockerExecutor(executor.DockerConfig{
+				Image: dockerImage,
+			})
 		} else {
 			exec = executor.NewLocalExecutor()
 		}

@@ -10,36 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockExecutor 模拟执行器
-type MockExecutor struct {
-	executeFunc func(ctx *types.ExecuteContext) (*types.ExecuteResult, error)
-}
-
-func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if m.executeFunc != nil {
-		return m.executeFunc(ctx)
-	}
-	return &types.ExecuteResult{}, nil
-}
-
-func (m *MockExecutor) ListCommands() []types.CommandInfo {
-	return []types.CommandInfo{
-		{
-			Name:        "test",
-			Description: "Test command",
-			Usage:       "test [args...]",
-			Category:    "test",
-		},
-	}
-}
-
 func TestHealthEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&MockExecutor{}, ":8080")
+	server := NewServer(&executor.MockExecutor{}, ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -56,8 +34,8 @@ func TestHealthEndpoint(t *testing.T) {
 func TestExecEndpoint(t *testing.T) {
 	t.Run("valid command", func(t *testing.T) {
 		// 创建模拟执行器
-		mockExec := &MockExecutor{
-			executeFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+		mockExec := &executor.MockExecutor{
+			ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 				assert.Equal(t, "test", ctx.Args[0])
 				assert.Equal(t, []string{"arg1", "arg2"}, ctx.Args[1:])
 				assert.Equal(t, "/tmp", ctx.Options.WorkDir)
@@ -101,7 +79,7 @@ func TestExecEndpoint(t *testing.T) {
 
 	t.Run("invalid request", func(t *testing.T) {
 		// 创建服务器
-		server := NewServer(&MockExecutor{}, ":8080")
+		server := NewServer(&executor.MockExecutor{}, ":8080")
 
 		// 创建无效的请求体
 		reqBody := []byte(`{invalid json}`)
@@ -120,7 +98,7 @@ func TestExecEndpoint(t *testing.T) {
 
 func TestListCommandsEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&MockExecutor{}, ":8080")
+	server := NewServer(&executor.MockExecutor{}, ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/commands", nil)
@@ -141,7 +119,7 @@ func TestListCommandsEndpoint(t *testing.T) {
 
 func TestCommandHelpEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&MockExecutor{}, ":8080")
+	server := NewServer(&executor.MockExecutor{}, ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/help?command=test", nil)
@@ -157,7 +135,7 @@ func TestCommandHelpEndpoint(t *testing.T) {
 
 func TestServerStartStop(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&MockExecutor{}, ":0")
+	server := NewServer(&executor.MockExecutor{}, ":0")
 
 	// 启动服务器
 	err := server.Start()

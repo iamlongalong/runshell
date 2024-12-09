@@ -6,37 +6,15 @@ import (
 	"os"
 	"testing"
 
+	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockExecutor 模拟执行器
-type MockExecutor struct {
-	executeFunc func(ctx *types.ExecuteContext) (*types.ExecuteResult, error)
-}
-
-func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if m.executeFunc != nil {
-		return m.executeFunc(ctx)
-	}
-	return &types.ExecuteResult{}, nil
-}
-
-func (m *MockExecutor) ListCommands() []types.CommandInfo {
-	return []types.CommandInfo{
-		{
-			Name:        "test",
-			Description: "Test command",
-			Usage:       "test [args...]",
-			Category:    "test",
-		},
-	}
-}
-
 func TestScriptCommand(t *testing.T) {
 	// 创建模拟执行器
-	mockExec := &MockExecutor{
-		executeFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	mockExec := &executor.MockExecutor{
+		ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 			return &types.ExecuteResult{
 				CommandName: "script",
 				ExitCode:    0,
@@ -139,7 +117,7 @@ func TestScriptCommand(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 
-			// 创建执行上下文
+			// 创建执行上下���
 			ctx := &types.ExecuteContext{
 				Context: context.Background(),
 				Args:    tt.args,

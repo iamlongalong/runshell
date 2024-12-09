@@ -12,11 +12,19 @@ import (
 // LocalExecutor 本地命令执行器
 type LocalExecutor struct {
 	commands sync.Map // 注册的命令
+	options  *types.ExecuteOptions
 }
 
 // NewLocalExecutor 创建新的本地执行器
 func NewLocalExecutor() *LocalExecutor {
-	return &LocalExecutor{}
+	return &LocalExecutor{
+		options: &types.ExecuteOptions{},
+	}
+}
+
+// SetOptions 设置执行选项
+func (e *LocalExecutor) SetOptions(options *types.ExecuteOptions) {
+	e.options = options
 }
 
 // Execute 执行命令
@@ -69,7 +77,6 @@ func (e *LocalExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult
 		cmd.Stderr = ctx.Options.Stderr
 	}
 
-	// 执行命令
 	startTime := types.GetTimeNow()
 	err = cmd.Run()
 	endTime := types.GetTimeNow()
@@ -132,5 +139,11 @@ func (e *LocalExecutor) UnregisterCommand(cmdName string) error {
 		return fmt.Errorf("command name is empty")
 	}
 	e.commands.Delete(cmdName)
+	return nil
+}
+
+// Close 关闭执行器，清理资源
+func (e *LocalExecutor) Close() error {
+	// 本地执行器不需要特别的清理工作
 	return nil
 }

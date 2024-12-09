@@ -157,8 +157,15 @@ type CommandFilter struct {
 type Executor interface {
 	// Execute 执行命令
 	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
+
 	// ListCommands 列出所有可用命令
 	ListCommands() []CommandInfo
+
+	// Close 关闭执行器，清理资源
+	Close() error
+
+	// SetOptions 设置执行选项
+	SetOptions(options *ExecuteOptions)
 }
 
 // CommandInfo 表示命令信息
@@ -207,7 +214,7 @@ func GetTimeNow() time.Time {
 
 // PipeCommand 表示管道命令
 type PipeCommand struct {
-	Command string   // 命令名称
+	Command string   // 命���名称
 	Args    []string // 命令参数
 }
 
@@ -216,4 +223,91 @@ type PipelineContext struct {
 	Commands []*PipeCommand  // 管道中的命令列表
 	Options  *ExecuteOptions // 执行选项
 	Context  context.Context // 上下文
+}
+
+// Session 表示一个执行会话
+type Session struct {
+	// ID 是会话的唯一标识符
+	ID string `json:"id"`
+
+	// Executor 是会话使用的执行器
+	Executor Executor `json:"-"`
+
+	// Options 是会话的执行选项
+	Options *ExecuteOptions `json:"options,omitempty"`
+
+	// Context 是会话的上下文
+	Context context.Context `json:"-"`
+
+	// Cancel 是用于取消会话的函数
+	Cancel context.CancelFunc `json:"-"`
+
+	// CreatedAt 是会话创建时间
+	CreatedAt time.Time `json:"created_at"`
+
+	// LastAccessedAt 是最后访问时间
+	LastAccessedAt time.Time `json:"last_accessed_at"`
+
+	// Metadata 存储会话相关的元数据
+	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Status 是会话状态
+	Status string `json:"status"`
+}
+
+// SessionManager 定义了会话管理器的接口
+type SessionManager interface {
+	// CreateSession 创建新的会话
+	CreateSession(executor Executor, options *ExecuteOptions) (*Session, error)
+
+	// GetSession 获取会话
+	GetSession(id string) (*Session, error)
+
+	// ListSessions 列出所有会话
+	ListSessions() ([]*Session, error)
+
+	// DeleteSession 删除会话
+	DeleteSession(id string) error
+
+	// UpdateSession 更新会话
+	UpdateSession(session *Session) error
+}
+
+// SessionRequest 表示创建会话的请求
+type SessionRequest struct {
+	// ExecutorType 是执行器类型（local/docker）
+	ExecutorType string `json:"executor_type"`
+
+	// DockerImage 是 Docker 执行器使用的镜像
+	DockerImage string `json:"docker_image,omitempty"`
+
+	// Options 是执行选项
+	Options *ExecuteOptions `json:"options,omitempty"`
+
+	// Metadata 是会话元数据
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// SessionResponse 表示会话操作的响应
+type SessionResponse struct {
+	// Session 是会话信息
+	Session *Session `json:"session"`
+
+	// Error 是错误信息
+	Error string `json:"error,omitempty"`
+}
+
+// ExecRequest 表示执行命令的请求
+type ExecRequest struct {
+	// Command 是要执行的命令
+	Command string `json:"command"`
+
+	// Args 是命令的参数
+	Args []string `json:"args"`
+
+	// WorkDir 是工作目录
+	WorkDir string `json:"work_dir,omitempty"`
+
+	// Env 是环境变量
+	Env map[string]string `json:"env,omitempty"`
 }
