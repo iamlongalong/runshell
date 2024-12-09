@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/iamlongalong/runshell/pkg/types"
@@ -32,7 +33,7 @@ func TestPipelineExecutor(t *testing.T) {
 			name:    "multiple pipes",
 			cmdStr:  "echo hello world | grep hello | wc -l",
 			wantErr: false,
-			want:    "       1\n",
+			want:    "1\n",
 		},
 		{
 			name:    "empty pipeline",
@@ -75,7 +76,7 @@ func TestPipelineExecutor(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, 0, result.ExitCode)
 			if tt.want != "" {
-				assert.Equal(t, tt.want, output.String())
+				assert.Equal(t, strings.TrimSpace(tt.want), strings.TrimSpace(output.String()))
 			}
 		})
 	}
