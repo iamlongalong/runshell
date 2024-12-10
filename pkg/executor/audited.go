@@ -3,51 +3,65 @@
 package executor
 
 import (
-	"github.com/iamlongalong/runshell/pkg/audit"
+	"time"
+
+	"github.com/iamlongalong/runshell/pkg/log"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
-// AuditedExecutor 审计执行器
+// AuditedExecutor 是一个带审计功能的执行器装饰器
 type AuditedExecutor struct {
 	executor types.Executor
-	auditor  *audit.Auditor
+	auditor  types.Auditor
 }
 
-// NewAuditedExecutor 创建新的审计执行器
-func NewAuditedExecutor(executor types.Executor, auditor *audit.Auditor) *AuditedExecutor {
+// NewAuditedExecutor 创建一个新的审计执行器
+func NewAuditedExecutor(executor types.Executor, auditor types.Auditor) *AuditedExecutor {
 	return &AuditedExecutor{
 		executor: executor,
 		auditor:  auditor,
 	}
 }
 
-// SetOptions 设置执行选项
-func (e *AuditedExecutor) SetOptions(options *types.ExecuteOptions) {
-	e.executor.SetOptions(options)
+const (
+	AuditedExecutorName = "audited"
+)
+
+// Name 返回执行器名称
+func (e *AuditedExecutor) Name() string {
+	return AuditedExecutorName
 }
 
 // Execute 执行命令并记录审计日志
 func (e *AuditedExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	// 记录开始执行
-	e.auditor.LogCommandExecution(&audit.CommandExecution{
-		Command:   ctx.Args[0],
-		Args:      ctx.Args[1:],
-		StartTime: types.GetTimeNow(),
-		Status:    "started",
-	})
+	// 创建审计记录
+	execution := &types.CommandExecution{
+		Command:   ctx.Command,
+		StartTime: time.Now(),
+		Status:    "STARTED",
+	}
+
+	log.Debug("Recording command start in audit log")
+	e.auditor.LogCommandExecution(execution)
 
 	// 执行命令
+	log.Info("Executing command: %s", ctx.Command)
 	result, err := e.executor.Execute(ctx)
 
-	// 记录执行结果
-	e.auditor.LogCommandExecution(&audit.CommandExecution{
-		Command:  ctx.Args[0],
-		Args:     ctx.Args[1:],
-		ExitCode: result.ExitCode,
-		Error:    err,
-		EndTime:  types.GetTimeNow(),
-		Status:   "completed",
-	})
+	// 更新审计记录
+	execution.EndTime = time.Now()
+	execution.Error = err
+	if result != nil {
+		execution.ExitCode = result.ExitCode
+	}
+	if err != nil {
+		execution.Status = "FAILED"
+	} else {
+		execution.Status = "COMPLETED"
+	}
+
+	log.Debug("Recording command completion in audit log")
+	e.auditor.LogCommandExecution(execution)
 
 	return result, err
 }
@@ -57,15 +71,25 @@ func (e *AuditedExecutor) ListCommands() []types.CommandInfo {
 	return e.executor.ListCommands()
 }
 
-// Close 关闭执行器，清理资源
+// Close 关闭执行器
 func (e *AuditedExecutor) Close() error {
 	// 记录关闭事件
-	e.auditor.LogCommandExecution(&audit.CommandExecution{
-		Command: "close",
-		Status:  "completed",
-		EndTime: types.GetTimeNow(),
-	})
+	execution := &types.CommandExecution{
+		Command:   types.Command{Command: "close"},
+		StartTime: time.Now(),
+		Status:    "EXECUTOR_CLOSE",
+	}
+
+	log.Debug("Recording executor closure in audit log")
+	e.auditor.LogCommandExecution(execution)
 
 	// 关闭底层执行器
-	return e.executor.Close()
+	if err := e.executor.Close(); err != nil {
+		execution.Error = err
+		execution.Status = "EXECUTOR_CLOSE_FAILED"
+		e.auditor.LogCommandExecution(execution)
+		return err
+	}
+
+	return nil
 }

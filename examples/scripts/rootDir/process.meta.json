@@ -1,0 +1,32 @@
+{
+    "name": "data_processor",
+    "type": "python",
+    "command": "process.py",
+    "description": "CSV 转 JSON 工具",
+    "args": [
+        {
+            "name": "input",
+            "flag": "--input",
+            "required": true,
+            "description": "输入 CSV 文件路径"
+        },
+        {
+            "name": "output",
+            "flag": "--output",
+            "required": true,
+            "description": "输出 JSON 文件路径"
+        },
+        {
+            "name": "filter-empty",
+            "flag": "--filter-empty",
+            "required": false,
+            "description": "是否过滤空值"
+        }
+    ],
+    "examples": [
+        {
+            "desc": "转换 CSV 到 JSON 并过滤空值",
+            "command": "data_processor --input data.csv --output result.json --filter-empty"
+        }
+    ]
+} 

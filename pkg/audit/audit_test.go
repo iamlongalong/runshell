@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,15 +20,14 @@ func TestAuditor(t *testing.T) {
 
 	// 创建审计器
 	logFile := filepath.Join(tempDir, "audit.log")
-	auditor, err := NewAuditor(logFile)
+	auditor, err := NewFileAuditor(logFile)
 	if err != nil {
 		t.Fatalf("Failed to create auditor: %v", err)
 	}
 
 	// 记录命令执行
-	exec := &CommandExecution{
-		Command:   "test",
-		Args:      []string{"arg1", "arg2"},
+	exec := &types.CommandExecution{
+		Command:   types.Command{Command: "test", Args: []string{"arg1", "arg2"}},
 		StartTime: time.Now(),
 		EndTime:   time.Now(),
 		ExitCode:  0,

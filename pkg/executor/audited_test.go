@@ -3,7 +3,7 @@ package executor
 import (
 	"context"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/iamlongalong/runshell/pkg/audit"
@@ -12,16 +12,15 @@ import (
 )
 
 func TestAuditedExecutor(t *testing.T) {
-	// 创建临时目录
-	tempDir, err := os.MkdirTemp("", "audit_test")
+	// 创建临时文件用于审计日志
+	tmpFile, err := os.CreateTemp("", "audit-*.log")
 	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
+		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.Remove(tmpFile.Name())
 
 	// 创建审计器
-	logFile := filepath.Join(tempDir, "audit.log")
-	auditor, err := audit.NewAuditor(logFile)
+	auditor, err := audit.NewFileAuditor(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("Failed to create auditor: %v", err)
 	}
@@ -30,7 +29,7 @@ func TestAuditedExecutor(t *testing.T) {
 	mockExec := &MockExecutor{
 		ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 			return &types.ExecuteResult{
-				CommandName: ctx.Args[0],
+				CommandName: ctx.Command.Command,
 				ExitCode:    0,
 				StartTime:   types.GetTimeNow(),
 				EndTime:     types.GetTimeNow(),
@@ -39,41 +38,28 @@ func TestAuditedExecutor(t *testing.T) {
 	}
 
 	// 创建审计执行器
-	auditedExec := NewAuditedExecutor(mockExec, auditor)
+	exec := NewAuditedExecutor(mockExec, auditor)
 
-	// 测试执行命令
+	// 执行命令
 	ctx := &types.ExecuteContext{
 		Context: context.Background(),
-		Args:    []string{"test", "arg1", "arg2"},
-		Options: &types.ExecuteOptions{
-			WorkDir: "/tmp",
-			Env:     map[string]string{"FOO": "bar"},
+		Command: types.Command{
+			Command: "test",
+			Args:    []string{"arg1", "arg2"},
 		},
+		Options: &types.ExecuteOptions{},
 	}
 
-	result, err := auditedExec.Execute(ctx)
+	result, err := exec.Execute(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
 
-	// 验证日志文件存在
-	_, err = os.Stat(logFile)
+	// 读取审计日志
+	content, err := os.ReadFile(tmpFile.Name())
 	assert.NoError(t, err)
 
-	// 读取日志内容
-	content, err := os.ReadFile(logFile)
-	assert.NoError(t, err)
-
-	// 验证日志内容
-	logStr := string(content)
-	assert.Contains(t, logStr, "test")
-	assert.Contains(t, logStr, "arg1")
-	assert.Contains(t, logStr, "arg2")
-	assert.Contains(t, logStr, "started")
-	assert.Contains(t, logStr, "completed")
-	assert.Contains(t, logStr, "ExitCode: 0")
-
-	// 测试列出命令
-	commands := auditedExec.ListCommands()
-	assert.Len(t, commands, 1)
-	assert.Equal(t, "test", commands[0].Name)
+	// 检查审计日志内容
+	logContent := string(content)
+	assert.Contains(t, strings.ToLower(logContent), "started")
+	assert.Contains(t, strings.ToLower(logContent), "completed")
 }

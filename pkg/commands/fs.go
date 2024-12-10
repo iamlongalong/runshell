@@ -10,31 +10,38 @@ import (
 
 // LSCommand 实现了 ls 命令。
 // 用于列出目录内容。
-type LSCommand struct{}
+type LSCommand struct {
+}
+
+func (c *LSCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "ls",
+		Description: "List directory contents",
+		Usage:       "ls [options] [directory]",
+		Category:    "file",
+	}
+}
 
 // Execute 执行 ls 命令。
-// 参数：
-//   - [path]：要列出内容的目录路径，默认为当前目录
 func (c *LSCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx.Executor == nil {
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     append([]string{"ls"}, ctx.Args...),
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
-	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
-// CatCommand 实现了 cat 命令。
 // 用于显示文件内容。
 type CatCommand struct{}
+
+func (c *CatCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "cat",
+		Description: "Concatenate and print files",
+		Usage:       "cat [options] [file...]",
+		Category:    "file",
+	}
+}
 
 // Execute 执行 cat 命令。
 // 参数：
@@ -44,25 +51,24 @@ func (c *CatCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	if len(ctx.Args) == 0 {
+	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("cat: missing file operand")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     append([]string{"cat"}, ctx.Args...),
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
-	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
-// MkdirCommand 实现了 mkdir 命令。
 // 用于创建新目录。
 type MkdirCommand struct{}
+
+func (c *MkdirCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "mkdir",
+		Description: "Make directories",
+		Usage:       "mkdir [options] directory...",
+		Category:    "file",
+	}
+}
 
 // Execute 执行 mkdir 命令。
 // 参数：
@@ -73,85 +79,79 @@ func (c *MkdirCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	if len(ctx.Args) == 0 {
+	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("mkdir: missing operand")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     append([]string{"mkdir"}, ctx.Args...),
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
 	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
 // RmCommand 实现了 rm 命令。
 // 用于删除文件或目录。
 type RmCommand struct{}
 
+func (c *RmCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "rm",
+		Description: "Remove files or directories",
+		Usage:       "rm [options] file...",
+		Category:    "file",
+	}
+}
+
 // Execute 执行 rm 命令。
-// 参数：
-//   - path：要删除的文件或目录路径
-//   - [-r]：可选，递归删除目录及其内容
-//   - [-f]：可选，强制删除，不提示
 func (c *RmCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx.Executor == nil {
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	if len(ctx.Args) == 0 {
+	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("rm: missing operand")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     append([]string{"rm"}, ctx.Args...),
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
-	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
 // CpCommand 实现了 cp 命令。
 // 用于复制文件或目录。
 type CpCommand struct{}
 
+func (c *CpCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "cp",
+		Description: "Copy files and directories",
+		Usage:       "cp [options] source... destination",
+		Category:    "file",
+	}
+}
+
 // Execute 执行 cp 命令。
-// 参数：
-//   - src：源文件或目录路径
-//   - dst：目标文件或目录路径
-//   - [-r]：可选，递归复制目录
 func (c *CpCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx.Executor == nil {
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	if len(ctx.Args) < 2 {
+	if len(ctx.Command.Args) < 2 {
 		return nil, fmt.Errorf("cp: missing file operand")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     append([]string{"cp"}, ctx.Args...),
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
 	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
 // PWDCommand 实现了 pwd 命令。
 // 用于显示当前工作目录。
 type PWDCommand struct{}
+
+func (c *PWDCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "pwd",
+		Description: "Print working directory",
+		Usage:       "pwd",
+		Category:    "file",
+	}
+}
 
 // Execute 执行 pwd 命令。
 // 无参数。
@@ -160,21 +160,21 @@ func (c *PWDCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     []string{"pwd"},
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
-
-	// 通过executor执行命令
-	return ctx.Executor.Execute(execCtx)
+	return ctx.Executor.Execute(ctx)
 }
 
 // ReadFileCommand 实现了 readfile 命令。
 // 用于读取文件指定行范围的内容。
 type ReadFileCommand struct{}
+
+func (c *ReadFileCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        "readfile",
+		Description: "Read file content by line range",
+		Usage:       "readfile [options] file start_line end_line",
+		Category:    "file",
+	}
+}
 
 // Execute 执行 readfile 命令。
 // 参数：
@@ -186,17 +186,17 @@ func (c *ReadFileCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	if len(ctx.Args) != 3 {
+	if len(ctx.Command.Args) != 3 {
 		return nil, fmt.Errorf("readfile command requires exactly 3 arguments: <file> <start_line> <end_line>")
 	}
 
 	// 解析行号
-	startLine, err := strconv.Atoi(ctx.Args[1])
+	startLine, err := strconv.Atoi(ctx.Command.Args[1])
 	if err != nil || startLine < 1 {
 		return nil, fmt.Errorf("invalid start line")
 	}
 
-	endLine, err := strconv.Atoi(ctx.Args[2])
+	endLine, err := strconv.Atoi(ctx.Command.Args[2])
 	if err != nil || endLine < 1 {
 		return nil, fmt.Errorf("invalid end line")
 	}
@@ -206,19 +206,11 @@ func (c *ReadFileCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 	}
 
 	// 准备命令
-	execCtx := &types.ExecuteContext{
-		Context:  ctx.Context,
-		Args:     []string{"cat", ctx.Args[0]},
-		Options:  ctx.Options,
-		Executor: ctx.Executor,
-	}
+	execCtx := ctx.Copy()
+	execCtx.Command.Command = "cat"
+	execCtx.Command.Args = ctx.Command.Args
+	execCtx.Options = ctx.Options
+	execCtx.Executor = ctx.Executor
 
-	// 先检查文件是否存在
-	result, err := ctx.Executor.Execute(execCtx)
-	if err != nil {
-		return nil, fmt.Errorf("no such file or directory")
-	}
-
-	// 通过executor执行命令
-	return result, nil
+	return ctx.Executor.Execute(execCtx)
 }

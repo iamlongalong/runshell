@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	execDockerImage string
-	execWorkDir     string
-	execEnvVars     []string
+	execDockerImage   string
+	execWorkDir       string
+	execEnvVars       []string
+	allowUnregistered bool
 )
 
 var execCmd = &cobra.Command{
@@ -27,12 +28,18 @@ var execCmd = &cobra.Command{
 
 		// 创建执行器
 		var exec types.Executor
+		var err error
 		if execDockerImage != "" {
-			exec = executor.NewDockerExecutor(executor.DockerConfig{
+			exec, err = executor.NewDockerExecutor(types.DockerConfig{
 				Image: execDockerImage,
-			})
+			}, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create Docker executor: %w", err)
+			}
 		} else {
-			exec = executor.NewLocalExecutor()
+			exec = executor.NewLocalExecutor(types.LocalConfig{
+				AllowUnregisteredCommands: true,
+			}, nil)
 		}
 
 		// 创建管道执行器
@@ -60,6 +67,10 @@ var execCmd = &cobra.Command{
 			// 执行管道命令
 			result, err := pipeExec.ExecutePipeline(pipeline)
 			if err != nil {
+				// 检查是否是 grep 命令没有匹配项的情况
+				if strings.Contains(cmdStr, "grep") && result != nil && result.ExitCode == 1 {
+					return nil
+				}
 				return fmt.Errorf("failed to execute pipeline: %w", err)
 			}
 
@@ -73,7 +84,7 @@ var execCmd = &cobra.Command{
 		// 非管道命令的处理
 		ctx := &types.ExecuteContext{
 			Context: cmd.Context(),
-			Args:    args,
+			Command: types.Command{Command: args[0]},
 			Options: &types.ExecuteOptions{
 				WorkDir: execWorkDir,
 				Env:     parseEnvVars(execEnvVars),
@@ -101,7 +112,8 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().StringVar(&execDockerImage, "docker-image", "", "Docker image to run command in")
 	execCmd.Flags().StringVar(&execWorkDir, "workdir", "", "Working directory for command execution")
-	execCmd.Flags().StringArrayVar(&execEnvVars, "env", nil, "Environment variables (KEY=VALUE)")
+	execCmd.Flags().StringArrayVarP(&execEnvVars, "env", "e", nil, "Environment variables (KEY=VALUE)")
+	execCmd.Flags().BoolVarP(&allowUnregistered, "allow-unregistered", "a", true, "Allow unregistered commands")
 }
 
 func parseEnvVars(vars []string) map[string]string {

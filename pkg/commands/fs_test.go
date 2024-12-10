@@ -50,7 +50,7 @@ func TestLSCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -112,7 +112,7 @@ func TestCatCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -166,7 +166,7 @@ func TestMkdirCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -229,7 +229,7 @@ func TestRmCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -292,7 +292,7 @@ func TestCpCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -339,7 +339,7 @@ func TestPWDCommand(t *testing.T) {
 			mockExec := executor.NewMockExecutor()
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     []string{},
+				Command:  types.Command{Args: []string{}},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					WorkDir: tt.workDir,
@@ -412,7 +412,7 @@ func TestReadFileCommand(t *testing.T) {
 
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,

@@ -1,0 +1,32 @@
+{
+    "name": "system_maintenance",
+    "type": "shell",
+    "command": "maintenance.sh",
+    "description": "系统维护脚本，执行基本的维护任务",
+    "args": [
+        {
+            "name": "check-disk",
+            "flag": "--check-disk",
+            "required": false,
+            "description": "检查磁盘使用情况"
+        },
+        {
+            "name": "check-memory",
+            "flag": "--check-memory",
+            "required": false,
+            "description": "检查内存使用情况"
+        },
+        {
+            "name": "list-processes",
+            "flag": "--list-processes",
+            "required": false,
+            "description": "列出正在运行的进程"
+        }
+    ],
+    "examples": [
+        {
+            "desc": "检查系统资源使用情况",
+            "command": "system_maintenance --check-disk --check-memory"
+        }
+    ]
+} 

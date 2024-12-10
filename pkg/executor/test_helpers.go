@@ -4,8 +4,8 @@ package executor
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/iamlongalong/runshell/pkg/types"
 )
@@ -24,71 +24,66 @@ func NewMockExecutor() *MockExecutor {
 	}
 }
 
+const (
+	MockExecutorName = "mock"
+)
+
+// Name 返回执行器名称
+func (m *MockExecutor) Name() string {
+	return MockExecutorName
+}
+
 func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if m.ExecuteFunc != nil {
 		return m.ExecuteFunc(ctx)
 	}
 
-	// 默认行为：处理常见命令
-	cmd := ctx.Args[0]
-	args := ctx.Args[1:]
+	// 默认的执行逻辑
+	cmd := ctx.Command.Command
+	args := ctx.Command.Args
 
-	// 处理无效命令
-	if strings.Contains(strings.Join(ctx.Args, " "), "invalid") {
+	// 如果没有命令，返回错误
+	if cmd == "" && len(args) == 0 {
 		return &types.ExecuteResult{
-			CommandName: cmd,
+			CommandName: "",
 			ExitCode:    1,
-			Error:       fmt.Errorf("invalid command"),
-		}, fmt.Errorf("invalid command")
+			Error:       fmt.Errorf("no command specified"),
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
+		}, fmt.Errorf("no command specified")
 	}
 
+	// 如果命令在参数中，则使用第一个参数作为命令
+	if cmd == "" && len(args) > 0 {
+		cmd = args[0]
+		args = args[1:]
+	}
+
+	// 处理无效命令
+	if !contains([]string{"ls", "cat", "mkdir", "rm", "cp", "pwd", "ps", "top", "df", "git", "go", "wget", "tar", "zip", "kill", "python"}, cmd) {
+		return &types.ExecuteResult{
+			CommandName: cmd,
+			ExitCode:    127,
+			Error:       fmt.Errorf("command not found: %s", cmd),
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
+		}, fmt.Errorf("command not found: %s", cmd)
+	}
+
+	// 处理特定命令
 	switch cmd {
 	case "ls":
-		path := "."
-		if len(args) > 0 {
-			path = args[0]
+		if len(args) > 0 && args[0] != "/test" {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    1,
+				Error:       fmt.Errorf("no such file or directory"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
+			}, fmt.Errorf("no such file or directory")
 		}
 
-		// 列出指定路径下的文件
-		var files []string
-		prefix := path
-		if prefix == "." {
-			prefix = ""
-		}
-
-		// 如果路径不是 "." 且不存在任何文件以该路径为前缀，返回错误
-		if prefix != "" {
-			hasFiles := false
-			for filePath := range m.FileSystem {
-				if strings.HasPrefix(filePath, prefix) {
-					hasFiles = true
-					break
-				}
-			}
-			if !hasFiles {
-				return &types.ExecuteResult{
-					CommandName: cmd,
-					ExitCode:    1,
-					Error:       fmt.Errorf("no such file or directory"),
-				}, fmt.Errorf("no such file or directory")
-			}
-		}
-
-		// 收集文件列表
-		for filePath := range m.FileSystem {
-			if prefix == "" || strings.HasPrefix(filePath, prefix) {
-				base := filepath.Base(filePath)
-				if !contains(files, base) {
-					files = append(files, base)
-				}
-			}
-		}
-
-		output := strings.Join(files, "\n")
-		if len(files) > 0 {
-			output += "\n"
-		}
-
+		output := "file1.txt\nfile2.txt\ndir1\n"
 		if ctx.Options.Stdout != nil {
 			ctx.Options.Stdout.Write([]byte(output))
 		}
@@ -104,6 +99,7 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("missing file operand"),
+				Output:      "",
 			}, fmt.Errorf("missing file operand")
 		}
 		content, exists := m.FileSystem[args[0]]
@@ -112,6 +108,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("no such file"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("no such file")
 		}
 		if ctx.Options.Stdout != nil {
@@ -129,12 +127,17 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("missing operand"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("missing operand")
 		}
 		m.FileSystem[args[0]] = ""
 		return &types.ExecuteResult{
 			CommandName: cmd,
 			ExitCode:    0,
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
+			Output:      "",
 		}, nil
 
 	case "rm":
@@ -230,6 +233,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    128,
 				Error:       fmt.Errorf("not a git repository"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("not a git repository")
 		}
 
@@ -239,6 +244,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("go.mod file not found"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("go.mod file not found")
 		}
 
@@ -248,6 +255,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("missing URL"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("missing URL")
 		}
 		if !strings.HasPrefix(args[0], "http") {
@@ -255,11 +264,15 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("invalid URL"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("invalid URL")
 		}
 		return &types.ExecuteResult{
 			CommandName: cmd,
 			ExitCode:    0,
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
 		}, nil
 
 	case "tar":
@@ -268,11 +281,25 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("missing operand"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("missing operand")
 		}
+		if args[0] == "-invalid" {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    1,
+				Error:       fmt.Errorf("invalid option"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
+			}, fmt.Errorf("invalid option")
+		}
+
 		return &types.ExecuteResult{
 			CommandName: cmd,
 			ExitCode:    0,
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
 		}, nil
 
 	case "zip":
@@ -281,6 +308,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 				CommandName: cmd,
 				ExitCode:    1,
 				Error:       fmt.Errorf("missing file operand"),
+				StartTime:   ctx.StartTime,
+				EndTime:     time.Now(),
 			}, fmt.Errorf("missing file operand")
 		}
 		// 检查所有源文件是否存在
@@ -290,12 +319,53 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 					CommandName: cmd,
 					ExitCode:    1,
 					Error:       fmt.Errorf("no such file: %s", file),
+					StartTime:   ctx.StartTime,
+					EndTime:     time.Now(),
 				}, fmt.Errorf("no such file: %s", file)
 			}
 		}
 		return &types.ExecuteResult{
 			CommandName: cmd,
 			ExitCode:    0,
+			StartTime:   ctx.StartTime,
+			EndTime:     time.Now(),
+		}, nil
+
+	case "kill":
+		if len(args) == 0 {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    1,
+				Error:       fmt.Errorf("missing operand"),
+			}, fmt.Errorf("missing operand")
+		}
+		if args[0] == "1234" {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    0,
+				Output:      "",
+			}, nil
+		}
+		if args[0] == "-9" {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    0,
+				Output:      "",
+			}, nil
+		}
+
+		if args[0] == "12345" {
+			return &types.ExecuteResult{
+				CommandName: cmd,
+				ExitCode:    1,
+				Error:       fmt.Errorf("no such process"),
+			}, fmt.Errorf("no such process")
+		}
+
+		return &types.ExecuteResult{
+			CommandName: cmd,
+			ExitCode:    0,
+			Output:      "",
 		}, nil
 
 	case "python":
@@ -327,7 +397,8 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 	return &types.ExecuteResult{
 		CommandName: cmd,
 		ExitCode:    0,
-		Output:      "mock output",
+		StartTime:   ctx.StartTime,
+		EndTime:     time.Now(),
 	}, nil
 }
 

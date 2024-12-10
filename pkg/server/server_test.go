@@ -36,8 +36,8 @@ func TestExecEndpoint(t *testing.T) {
 		// 创建模拟执行器
 		mockExec := &executor.MockExecutor{
 			ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-				assert.Equal(t, "test", ctx.Args[0])
-				assert.Equal(t, []string{"arg1", "arg2"}, ctx.Args[1:])
+				assert.Equal(t, "test", ctx.Command.Command)
+				assert.Equal(t, []string{"arg1", "arg2"}, ctx.Command.Args)
 				assert.Equal(t, "/tmp", ctx.Options.WorkDir)
 				assert.Equal(t, map[string]string{"FOO": "bar"}, ctx.Options.Env)
 				return &types.ExecuteResult{

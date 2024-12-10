@@ -34,10 +34,18 @@ func TestPSCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &executor.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte("  PID  CPU%  MEM%  COMMAND\n  1    0.0   0.1   init\n"))
+					return &types.ExecuteResult{
+						CommandName: "ps",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "ps", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -82,10 +90,18 @@ func TestTopCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &executor.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte("System Overview\nCPU: 0.1%\nMEM: 50%\n"))
+					return &types.ExecuteResult{
+						CommandName: "top",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "top", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -132,7 +148,7 @@ func TestDFCommand(t *testing.T) {
 			mockExec := &executor.MockExecutor{}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "df", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -177,10 +193,18 @@ func TestUNameCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &executor.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte("Darwin 22.6.0"))
+					return &types.ExecuteResult{
+						CommandName: "uname",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "uname", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -223,10 +247,18 @@ func TestEnvCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &executor.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte("PATH=/usr/local/bin:/usr/bin\nGOPATH=/Users/user/go\n"))
+					return &types.ExecuteResult{
+						CommandName: "env",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "env", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,
@@ -262,6 +294,11 @@ func TestKillCommand(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "kill with pid not found",
+			args:    []string{"12345"},
+			wantErr: true,
+		},
+		{
 			name:    "kill with signal",
 			args:    []string{"-9", "1234"},
 			wantErr: false,
@@ -277,7 +314,7 @@ func TestKillCommand(t *testing.T) {
 			mockExec := &executor.MockExecutor{}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
-				Args:     tt.args,
+				Command:  types.Command{Command: "kill", Args: tt.args},
 				Executor: mockExec,
 				Options: &types.ExecuteOptions{
 					Stdout: stdout,

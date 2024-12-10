@@ -2,7 +2,7 @@
 
 A secure command execution framework designed for AI/LLM agents to safely interact with system operations.
 
-[![English](https://img.shields.io/badge/README-English-blue)](README.md) [![中文](https://img.shields.io/badge/README-中文-red)](README.cn.md)
+[![English](https://img.shields.io/badge/README-English-blue)](README.md) [![中文](https://img.shields.io/badge/README-中文-red)](README_zh.md)
 
 ![CI Status](https://github.com/iamlongalong/runshell/workflows/CI/badge.svg)
 ![Release Status](https://github.com/iamlongalong/runshell/workflows/Release/badge.svg)
@@ -66,19 +66,51 @@ make docker-build docker-run
 
 ```bash
 # Execute simple command
-runshell exec ls -l
+runshell exec -- ls -l
 
 # Set working directory
-runshell exec --workdir /tmp ls -l
+runshell exec --workdir /tmp -- ls -l
 
 # Set environment variables
 runshell exec --env KEY=VALUE env
 
+
+# Example of using Docker image
+runshell exec --docker-image ubuntu:latest -- ls -l
+runshell exec --docker-image busybox:latest --env KEY=VALUE env
+runshell exec --docker-image busybox:latest --workdir /app -- python3 script.py
+
+
 # Start HTTP server
 runshell server --http :8080
 
-# Start interactive shell
-runshell shell
+# HTTP API Examples
+# Execute command via HTTP POST
+curl -X POST http://localhost:8080/exec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "ls -l",
+    "workdir": "/tmp",
+    "env": {"KEY": "VALUE"}
+  }'
+
+# Execute command in Docker container
+curl -X POST http://localhost:8080/exec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "python3 script.py",
+    "docker_image": "python:3.9",
+    "workdir": "/app",
+    "env": {"PYTHON_ENV": "production"}
+  }'
+
+# Get execution status
+curl http://localhost:8080/status/{execution_id}
+
+# Stream command output
+curl http://localhost:8080/stream/{execution_id}
+
+
 ```
 
 ## Development Guide

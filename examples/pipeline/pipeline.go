@@ -73,7 +73,9 @@ func runPipeline(pipeExec *executor.PipelineExecutor, cmdStr string, env map[str
 
 func main() {
 	// 创建本地执行器
-	localExec := executor.NewLocalExecutor()
+	localExec := executor.NewLocalExecutor(types.LocalConfig{
+		AllowUnregisteredCommands: true,
+	}, &types.ExecuteOptions{})
 
 	// 创建管道执行器
 	pipeExec := executor.NewPipelineExecutor(localExec)

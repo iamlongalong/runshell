@@ -171,8 +171,11 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 
 	// 执行命令
 	execCtx := &types.ExecuteContext{
-		Context:  r.Context(),
-		Args:     append([]string{req.Command}, req.Args...),
+		Context: r.Context(),
+		Command: types.Command{
+			Command: req.Command,
+			Args:    req.Args,
+		},
 		Options:  opts,
 		Executor: s.executor,
 	}
@@ -322,8 +325,11 @@ func (s *Server) handleSessionOperations(w http.ResponseWriter, r *http.Request)
 
 		// 执行命令
 		execCtx := &types.ExecuteContext{
-			Context:  r.Context(),
-			Args:     append([]string{req.Command}, req.Args...),
+			Context: r.Context(),
+			Command: types.Command{
+				Command: req.Command,
+				Args:    req.Args,
+			},
 			Options:  opts,
 			Executor: session.Executor,
 		}
@@ -398,7 +404,10 @@ func (s *StreamScanner) Text() string {
 func (s *Server) executeCommand(ctx context.Context, cmdName string, args []string, opts *types.ExecuteOptions) (*types.ExecuteResult, error) {
 	execCtx := &types.ExecuteContext{
 		Context: ctx,
-		Args:    append([]string{cmdName}, args...),
+		Command: types.Command{
+			Command: cmdName,
+			Args:    args,
+		},
 		Options: opts,
 	}
 	return s.executor.Execute(execCtx)

@@ -34,14 +34,63 @@ type ExecuteOptions struct {
 	Metadata map[string]string
 }
 
+// Merge 合并两个执行选项, 用于处理默认选项和用户自定义选项
+func (opts *ExecuteOptions) Merge(other *ExecuteOptions) *ExecuteOptions {
+	if other == nil {
+		return opts
+	}
+
+	if opts == nil {
+		return other
+	}
+
+	if opts.WorkDir == "" {
+		opts.WorkDir = other.WorkDir
+	}
+
+	for k, v := range other.Env {
+		if _, ok := opts.Env[k]; !ok {
+			opts.Env[k] = v
+		}
+	}
+
+	if opts.Timeout == 0 {
+		opts.Timeout = other.Timeout
+	}
+
+	if opts.Stdin == nil {
+		opts.Stdin = other.Stdin
+	}
+
+	if opts.Stdout == nil {
+		opts.Stdout = other.Stdout
+	}
+
+	if opts.Stderr == nil {
+		opts.Stderr = other.Stderr
+	}
+
+	if opts.User == nil {
+		opts.User = other.User
+	}
+
+	for k, v := range other.Metadata {
+		if _, ok := opts.Metadata[k]; !ok {
+			opts.Metadata[k] = v
+		}
+	}
+
+	return opts
+}
+
 // ExecuteContext 包含命令执行的上下文信息。
 // 提供了命令执行时需要的所有上下文数据。
 type ExecuteContext struct {
 	// Context 是标准的 context.Context 实例
 	Context context.Context
 
-	// Args 是命令的参数列表
-	Args []string
+	// Command 是要执行的命令名称
+	Command Command
 
 	// Options 是执行选项
 	Options *ExecuteOptions
@@ -49,26 +98,29 @@ type ExecuteContext struct {
 	// StartTime 是命令开始执行的时间
 	StartTime time.Time
 
-	// Command 是要执行的命令名称
-	Command string
-
 	// Input 是命令的输入数据
 	Input io.Reader
 
 	// IsPiped 是否是管道命令
 	IsPiped bool
-
-	// PipeInput 管道输入
-	PipeInput io.Reader
-
-	// PipeOutput 管道输出
-	PipeOutput io.Writer
-
 	// PipeContext 管道上下文
 	PipeContext *PipelineContext
 
 	// Executor 是执行器实例
 	Executor Executor
+}
+
+func (ctx *ExecuteContext) Copy() *ExecuteContext {
+	return &ExecuteContext{
+		Context:     ctx.Context,
+		Command:     ctx.Command,
+		Options:     ctx.Options,
+		StartTime:   ctx.StartTime,
+		Input:       ctx.Input,
+		IsPiped:     ctx.IsPiped,
+		PipeContext: ctx.PipeContext,
+		Executor:    ctx.Executor,
+	}
 }
 
 // ExecuteResult 表示命令执行的结果。
@@ -92,7 +144,7 @@ type ExecuteResult struct {
 	// ResourceUsage 记录资源使用情况
 	ResourceUsage ResourceUsage
 
-	// Output 是命令的输出内容
+	// Output 是命令的输出
 	Output string
 }
 
@@ -126,23 +178,21 @@ type User struct {
 	Groups []int
 }
 
-// Command 表示一个可执行的命令
-type Command struct {
+// CommandHandler 是 ICommand 的别名，用于保持向后兼容性
+type CommandHandler = ICommand
+
+// CommandInfo 表示一个可执行的命令
+type CommandInfo struct {
 	Name        string            // 命令名称
 	Description string            // 命令描述
 	Usage       string            // 命令用法
 	Category    string            // 命令分类
 	Metadata    map[string]string // 命令元数据
-	Handler     CommandHandler    // 命令处理器
 }
 
-// Execute 执行命令
-func (c *Command) Execute(ctx *ExecuteContext) (*ExecuteResult, error) {
-	return c.Handler.Execute(ctx)
-}
-
-// CommandHandler 定义了命令处理器的接口
-type CommandHandler interface {
+// ICommand 定义了命令处理器的接口
+type ICommand interface {
+	Info() CommandInfo
 	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
 }
 
@@ -158,26 +208,17 @@ type CommandFilter struct {
 
 // Executor 定义了命令执行器的接口
 type Executor interface {
+	// Name 返回执行器名称
+	Name() string
+
 	// Execute 执行命令
 	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
 
-	// ListCommands 列出所有可用命令
+	// ListCommands 出所有可用命令
 	ListCommands() []CommandInfo
 
 	// Close 关闭执行器，清理资源
 	Close() error
-
-	// SetOptions 设置执行选项
-	SetOptions(options *ExecuteOptions)
-}
-
-// CommandInfo 表示命令信息
-type CommandInfo struct {
-	Name        string            // 命令名称
-	Description string            // 命令描述
-	Usage       string            // 命令用法
-	Category    string            // 命令分��
-	Metadata    map[string]string // 命令元数据
 }
 
 // ErrCommandNotFound 表示命令未找到
@@ -210,25 +251,25 @@ func NewExecuteError(message, code string) *ExecuteError {
 }
 
 // GetTimeNow 返回当前时间
-// 主要用于测试时的时间模拟
 func GetTimeNow() time.Time {
 	return time.Now()
 }
 
-// PipeCommand 表示管道命令
-type PipeCommand struct {
+// Command 表示命令
+type Command struct {
 	Command string   // 命令名称
 	Args    []string // 命令参数
 }
 
 // PipelineContext 表示管道上下文
 type PipelineContext struct {
-	Commands []*PipeCommand  // 管道中的命令列表
+	Context context.Context // 上下文
+
+	Commands []*Command      // 管道中的命令列表
 	Options  *ExecuteOptions // 执行选项
-	Context  context.Context // 上下文
 }
 
-// Session 表示一个执行会话
+// Session 表示一个执行会
 type Session struct {
 	// ID 是会话的唯一标识符
 	ID string `json:"id"`
@@ -276,13 +317,23 @@ type SessionManager interface {
 	UpdateSession(session *Session) error
 }
 
-// SessionRequest 表示创建会话的请求
+const (
+	// ExecutorTypeLocal 表示本地执行器
+	ExecutorTypeLocal = "local"
+	// ExecutorTypeDocker 表示 Docker 执行器
+	ExecutorTypeDocker = "docker"
+)
+
+// SessionRequest 表示创会话的请求
 type SessionRequest struct {
 	// ExecutorType 是执行器类型（local/docker）
 	ExecutorType string `json:"executor_type"`
 
-	// DockerImage 是 Docker 执行器使用的镜像
-	DockerImage string `json:"docker_image,omitempty"`
+	// DockerConfig 是 Docker 执行器配置
+	DockerConfig *DockerConfig `json:"docker_config,omitempty"`
+
+	// LocalConfig 是本地执行器配置
+	LocalConfig *LocalConfig `json:"local_config,omitempty"`
 
 	// Options 是执行选项
 	Options *ExecuteOptions `json:"options,omitempty"`
@@ -300,17 +351,33 @@ type SessionResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
-// ExecRequest 表示执行命令的请求
-type ExecRequest struct {
-	// Command 是要执行的命令
-	Command string `json:"command"`
+// CommandExecution 表示命令执行记录
+type CommandExecution struct {
+	Command Command // 命令
 
-	// Args 是命令的参数
-	Args []string `json:"args"`
+	StartTime time.Time // 开始时间
+	EndTime   time.Time // 结束时间
+	ExitCode  int       // 退出码
+	Error     error     // 错误信息
+	Status    string    // 执行状态
+}
 
-	// WorkDir 是工作目录
-	WorkDir string `json:"work_dir,omitempty"`
+// Auditor 定义审计器接口
+type Auditor interface {
+	// LogCommandExecution 记录命令执行
+	LogCommandExecution(exec *CommandExecution) error
+}
 
-	// Env 是环境变量
-	Env map[string]string `json:"env,omitempty"`
+// DockerConfig 表示 Docker 执行器的配置
+type DockerConfig struct {
+	Image                     string // Docker 镜像
+	WorkDir                   string // 工作目录
+	User                      string // 用户
+	BindMount                 string // 目录绑定
+	AllowUnregisteredCommands bool   // 是否允许执行未注册的命令
+}
+
+// LocalConfig 本地执行器配置
+type LocalConfig struct {
+	AllowUnregisteredCommands bool // 是否允许执行未注册的命令
 }

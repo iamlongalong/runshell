@@ -24,8 +24,11 @@ const (
 func createSession(projectDir string) (string, error) {
 	// 准备请求体
 	reqBody := types.SessionRequest{
-		ExecutorType: "docker",
-		DockerImage:  dockerImage,
+		ExecutorType: types.ExecutorTypeDocker,
+		DockerConfig: &types.DockerConfig{
+			Image:   dockerImage,
+			WorkDir: executor.DefaultWorkDir,
+		},
 		Options: &types.ExecuteOptions{
 			WorkDir: executor.DefaultWorkDir,
 			Env: map[string]string{
@@ -174,7 +177,9 @@ func deleteSession(sessionID string) error {
 
 func main() {
 	// 创建执行器和服务器
-	exec := executor.NewLocalExecutor()
+	exec := executor.NewLocalExecutor(types.LocalConfig{
+		AllowUnregisteredCommands: true,
+	}, &types.ExecuteOptions{})
 	srv := server.NewServer(exec, ":8081")
 
 	// 启动服务器
@@ -188,7 +193,7 @@ func main() {
 	// 等待服务器启动
 	time.Sleep(2 * time.Second)
 
-	// 创建��目目录（在用户主目录下）
+	// 创建项目目录（在用户主目录下）
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatalf("Failed to get home directory: %v", err)

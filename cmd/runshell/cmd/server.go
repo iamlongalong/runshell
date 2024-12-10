@@ -25,21 +25,27 @@ var serverCmd = &cobra.Command{
 	Short: "Start the HTTP server",
 	Long:  `Start the HTTP server to handle command execution requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		var err error
 		// 创建执行器
 		var exec types.Executor
 		if dockerImage != "" {
-			exec = executor.NewDockerExecutor(executor.DockerConfig{
+			exec, err = executor.NewDockerExecutor(types.DockerConfig{
 				Image: dockerImage,
-			})
+			}, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create Docker executor: %w", err)
+			}
 		} else {
-			exec = executor.NewLocalExecutor()
+			exec = executor.NewLocalExecutor(types.LocalConfig{
+				AllowUnregisteredCommands: true,
+			}, nil)
 		}
 
 		// 如果指定了审计目录，创建审计执行器
 		if auditDir != "" {
 			// 创建审计器
 			logFile := filepath.Join(auditDir, "audit.log")
-			auditor, err := audit.NewAuditor(logFile)
+			auditor, err := audit.NewFileAuditor(logFile)
 			if err != nil {
 				return fmt.Errorf("failed to create auditor: %w", err)
 			}

@@ -98,33 +98,12 @@ func (m *MemorySessionManager) UpdateSession(session *types.Session) error {
 // CreateExecutor 创建执行器
 func CreateExecutor(req *types.SessionRequest) (types.Executor, error) {
 	switch req.ExecutorType {
-	case "local":
-		return executor.NewLocalExecutor(), nil
-	case "docker":
-		if req.DockerImage == "" {
-			return nil, fmt.Errorf("docker image is required for docker executor")
-		}
-
-		// 创建 Docker 配置
-		config := executor.DockerConfig{
-			Image:   req.DockerImage,
-			WorkDir: "/workspace", // 默认工作目录
-		}
-
-		// 如果请求中指定了工作目录绑定
-		if req.Options != nil && req.Options.Metadata != nil {
-			if bindMount, ok := req.Options.Metadata["bind_mount"]; ok {
-				config.BindMount = bindMount
-			}
-			if workDir, ok := req.Options.Metadata["work_dir"]; ok {
-				config.WorkDir = workDir
-			}
-		}
-
-		// 创建执行器
-		exec := executor.NewDockerExecutor(config)
-		if req.Options != nil {
-			exec.SetOptions(req.Options)
+	case types.ExecutorTypeLocal:
+		return executor.NewLocalExecutor(*req.LocalConfig, req.Options), nil
+	case types.ExecutorTypeDocker:
+		exec, err := executor.NewDockerExecutor(*req.DockerConfig, req.Options)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Docker executor: %w", err)
 		}
 		return exec, nil
 	default:
