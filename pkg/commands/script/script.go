@@ -61,6 +61,7 @@ type Script struct {
 	Dir      string // 脚本所在目录
 	FilePath string // 脚本文件完整路径
 	MetaPath string // 描述文件路径
+	executor types.Executor
 }
 
 // ScriptManager 实现 types.Executor 接口
@@ -216,7 +217,7 @@ func (sm *ScriptManager) loadScript(metaPath string) (*Script, error) {
 
 	// 获取脚本文件路径
 	scriptDir := filepath.Dir(metaPath)
-	scriptPath := filepath.Join(scriptDir, meta.Command)
+	scriptPath := filepath.Join(scriptDir, filepath.Base(meta.Command))
 	if _, err := os.Stat(scriptPath); err != nil {
 		return nil, fmt.Errorf("script file not found: %s", scriptPath)
 	}
@@ -231,10 +232,11 @@ func (sm *ScriptManager) loadScript(metaPath string) (*Script, error) {
 		Dir:      scriptDir,
 		FilePath: scriptPath,
 		MetaPath: metaPath,
+		executor: sm.executor,
 	}, nil
 }
 
-// generateUsage 生成命令使用说明
+// generateUsage ��成命令使用说明
 func (sm *ScriptManager) generateUsage(script *Script) string {
 	var flags []string
 	for _, arg := range script.Meta.Args {
@@ -368,8 +370,40 @@ func (s *Script) buildCommand(args []string) (*types.Command, error) {
 	}
 }
 
+// validatePath 验证脚本路径
+func validatePath(rootDir, path string) error {
+	// 检查是否是绝对路径
+	if filepath.IsAbs(path) {
+		return fmt.Errorf("absolute path not allowed")
+	}
+
+	// 检查路径中是否包含 ".." 或 "."
+	if strings.Contains(path, "..") || strings.Contains(path, "./") {
+		return fmt.Errorf("path traversal not allowed")
+	}
+
+	// 检查路径是否在根目录下
+	fullPath := filepath.Join(rootDir, path)
+	rel, err := filepath.Rel(rootDir, fullPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("path must be under root directory")
+	}
+
+	return nil
+}
+
+// getScriptPermissions 根据脚本类型获取文件权限
+func getScriptPermissions(scriptType ScriptType) os.FileMode {
+	switch scriptType {
+	case PythonScript, JavaScriptScript, ShellScript:
+		return 0755 // 可执行文件
+	default:
+		return 0644 // 普通文件
+	}
+}
+
 // CreateScript 创建新脚本
-func (sm *ScriptManager) CreateScript(meta *ScriptMeta, scriptContent string) error {
+func (sm *ScriptManager) CreateScript(meta *ScriptMeta, content string) error {
 	// 验证元数据
 	if err := validateScriptMeta(meta); err != nil {
 		return fmt.Errorf("invalid script meta: %w", err)
@@ -385,8 +419,9 @@ func (sm *ScriptManager) CreateScript(meta *ScriptMeta, scriptContent string) er
 		return fmt.Errorf("script already exists: %s", meta.Name)
 	}
 
-	// 获取完整的脚本路径
+	// 构建脚本路径
 	scriptPath := filepath.Join(sm.rootDir, meta.Command)
+	metaPath := scriptPath + MetaFileSuffix
 
 	// 确保目录存在
 	scriptDir := filepath.Dir(scriptPath)
@@ -395,114 +430,103 @@ func (sm *ScriptManager) CreateScript(meta *ScriptMeta, scriptContent string) er
 	}
 
 	// 写入脚本文件
-	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), getScriptPermissions(meta.Type)); err != nil {
 		return fmt.Errorf("failed to write script file: %w", err)
 	}
 
 	// 写入元数据文件
-	metaPath := scriptPath + MetaFileSuffix
 	metaData, err := json.MarshalIndent(meta, "", "    ")
 	if err != nil {
-		os.Remove(scriptPath)
+		os.Remove(scriptPath) // 清理脚本文件
 		return fmt.Errorf("failed to marshal meta data: %w", err)
 	}
 
 	if err := os.WriteFile(metaPath, metaData, 0644); err != nil {
-		os.Remove(scriptPath)
+		os.Remove(scriptPath) // 清理脚本文件
 		return fmt.Errorf("failed to write meta file: %w", err)
 	}
 
-	// 加载新创建的脚本
+	// 加载脚本
 	script, err := sm.loadScript(metaPath)
 	if err != nil {
-		os.Remove(scriptPath)
-		os.Remove(metaPath)
-		return fmt.Errorf("failed to load created script: %w", err)
+		os.Remove(scriptPath) // 清理脚本文件
+		os.Remove(metaPath)   // 清理元数据文件
+		return fmt.Errorf("failed to load script: %w", err)
 	}
 
+	// 添加到映射
 	sm.scripts[meta.Name] = script
+
 	return nil
 }
 
-// UpdateScript 更新现有脚本
-func (sm *ScriptManager) UpdateScript(name string, meta *ScriptMeta, scriptContent string) error {
-	// 检查脚本是否存在
-	script, exists := sm.scripts[name]
-	if !exists {
+// UpdateScript 更新脚本
+func (sm *ScriptManager) UpdateScript(name string, newMeta *ScriptMeta, newContent string) error {
+	script, ok := sm.scripts[name]
+	if !ok {
 		return fmt.Errorf("script not found: %s", name)
 	}
 
-	// 如果提供了新的元数据，验证并更新
-	if meta != nil {
-		if err := validateScriptMeta(meta); err != nil {
-			return fmt.Errorf("invalid script meta: %w", err)
-		}
-
-		// 如果更改了名称，确保新名称未被使用
-		if meta.Name != name {
-			if _, exists := sm.scripts[meta.Name]; exists {
-				return fmt.Errorf("script name already exists: %s", meta.Name)
+	// 如果提供了新的元数据
+	if newMeta != nil {
+		// 如果要移动到新目录，确保目录存在
+		if newMeta.Command != script.Meta.Command {
+			newDir := filepath.Dir(filepath.Join(sm.rootDir, newMeta.Command))
+			if err := os.MkdirAll(newDir, 0755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
 			}
-		}
-
-		// 如果命令名发生变化，需要处理文件重命名
-		if meta.Command != script.Meta.Command {
-			newScriptPath := getScriptPathFromName(sm.rootDir, meta.Command)
-			newMetaPath := newScriptPath + MetaFileSuffix
-
-			// 确保目标目录存在
-			newScriptDir := filepath.Dir(newScriptPath)
-			if err := os.MkdirAll(newScriptDir, 0755); err != nil {
-				return fmt.Errorf("failed to create script directory: %w", err)
-			}
-
-			// 重命名脚本文件
-			if err := os.Rename(script.FilePath, newScriptPath); err != nil {
-				return fmt.Errorf("failed to rename script file: %w", err)
-			}
-
-			// 重命名元数据文件
-			if err := os.Rename(script.MetaPath, newMetaPath); err != nil {
-				// 如果元数据重命名失败，回滚脚本文件重命名
-				os.Rename(newScriptPath, script.FilePath)
-				return fmt.Errorf("failed to rename meta file: %w", err)
-			}
-
-			script.FilePath = newScriptPath
-			script.MetaPath = newMetaPath
-			script.Dir = filepath.Dir(newScriptPath)
 		}
 
 		// 更新元数据文件
-		metaData, err := json.MarshalIndent(meta, "", "    ")
+		data, err := json.MarshalIndent(newMeta, "", "  ")
 		if err != nil {
-			return fmt.Errorf("failed to marshal meta data: %w", err)
+			return fmt.Errorf("failed to marshal meta: %w", err)
 		}
 
-		if err := os.WriteFile(script.MetaPath, metaData, 0644); err != nil {
-			return fmt.Errorf("failed to write meta file: %w", err)
+		// 如果需要移动文件
+		if newMeta.Command != script.Meta.Command {
+			// 新的文件路径
+			newScriptPath := filepath.Join(sm.rootDir, newMeta.Command)
+			newMetaPath := newScriptPath + MetaFileSuffix
+
+			// 移动脚本文件
+			if err := os.Rename(script.FilePath, newScriptPath); err != nil {
+				return fmt.Errorf("failed to move script file: %w", err)
+			}
+
+			// 写入新的元数据文件
+			if err := os.WriteFile(newMetaPath, data, 0644); err != nil {
+				return fmt.Errorf("failed to write meta file: %w", err)
+			}
+
+			// 删除旧的元数据文件
+			if err := os.Remove(script.MetaPath); err != nil {
+				log.Error("Failed to remove old meta file: %v", err)
+			}
+
+			// 更新脚本对象
+			script.Meta = newMeta
+			script.FilePath = newScriptPath
+			script.MetaPath = newMetaPath
+			script.Dir = filepath.Dir(newScriptPath)
+
+			// 更新映射
+			delete(sm.scripts, name)
+			sm.scripts[newMeta.Name] = script
+		} else {
+			// 仅更新元数��
+			if err := os.WriteFile(script.MetaPath, data, 0644); err != nil {
+				return fmt.Errorf("failed to write meta file: %w", err)
+			}
+			script.Meta = newMeta
 		}
 	}
 
-	// 如果提供了新脚本内容，更新脚本文件
-	if scriptContent != "" {
-		if err := os.WriteFile(script.FilePath, []byte(scriptContent), 0755); err != nil {
+	// 如果提供了新的内容
+	if newContent != "" {
+		if err := os.WriteFile(script.FilePath, []byte(newContent), 0644); err != nil {
 			return fmt.Errorf("failed to write script file: %w", err)
 		}
-	}
-
-	// 重新加载脚本
-	updatedScript, err := sm.loadScript(script.MetaPath)
-	if err != nil {
-		return fmt.Errorf("failed to reload updated script: %w", err)
-	}
-
-	// 更新映射
-	if meta != nil && meta.Name != name {
-		delete(sm.scripts, name)
-		sm.scripts[meta.Name] = updatedScript
-	} else {
-		sm.scripts[name] = updatedScript
 	}
 
 	return nil
@@ -510,21 +534,24 @@ func (sm *ScriptManager) UpdateScript(name string, meta *ScriptMeta, scriptConte
 
 // DeleteScript 删除脚本
 func (sm *ScriptManager) DeleteScript(name string) error {
-	script, exists := sm.scripts[name]
-	if !exists {
+	script, ok := sm.scripts[name]
+	if !ok {
 		return fmt.Errorf("script not found: %s", name)
 	}
 
-	// 删除脚本文件和元数据文件
+	// 删除脚本文件
 	if err := os.Remove(script.FilePath); err != nil {
 		return fmt.Errorf("failed to delete script file: %w", err)
 	}
+
+	// 删除元数据文件
 	if err := os.Remove(script.MetaPath); err != nil {
-		return fmt.Errorf("failed to delete meta file: %w", err)
+		log.Error("Failed to delete meta file: %v", err)
 	}
 
 	// 从映射中删除
 	delete(sm.scripts, name)
+
 	return nil
 }
 
@@ -606,40 +633,6 @@ func validateScriptMeta(meta *ScriptMeta) error {
 			return fmt.Errorf("duplicate argument flag: %s", arg.Flag)
 		}
 		flagNames[arg.Flag] = true
-	}
-
-	return nil
-}
-
-// validatePath 验证路径安全性
-func validatePath(rootDir, path string) error {
-	// 检查路径长度
-	if len(path) > MaxPathLength {
-		return fmt.Errorf("path too long (max %d characters)", MaxPathLength)
-	}
-
-	// 检查路径中的特殊字符
-	if strings.Contains(path, "./") || strings.Contains(path, ".\\") {
-		return fmt.Errorf("relative path notation not allowed: %s", path)
-	}
-
-	// 规范化路径
-	cleanPath := filepath.Clean(path)
-
-	// 不允许绝对路径
-	if filepath.IsAbs(cleanPath) {
-		return fmt.Errorf("absolute path not allowed: %s", path)
-	}
-
-	// 不允许父目录引用
-	if strings.Contains(cleanPath, "..") {
-		return fmt.Errorf("parent directory reference not allowed: %s", path)
-	}
-
-	// 验证最终路径在根目录下
-	fullPath := filepath.Join(rootDir, cleanPath)
-	if !strings.HasPrefix(fullPath, rootDir) {
-		return fmt.Errorf("path escapes root directory: %s", path)
 	}
 
 	return nil

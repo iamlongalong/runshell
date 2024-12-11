@@ -25,18 +25,14 @@ var serverCmd = &cobra.Command{
 	Short: "Start the HTTP server",
 	Long:  `Start the HTTP server to handle command execution requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var err error
-		// 创建执行器
-		var exec types.Executor
+		// 创建执行器构建器
+		var execBuilder types.ExecutorBuilder
 		if dockerImage != "" {
-			exec, err = executor.NewDockerExecutor(types.DockerConfig{
+			execBuilder = executor.NewDockerExecutorBuilder(types.DockerConfig{
 				Image: dockerImage,
 			}, nil)
-			if err != nil {
-				return fmt.Errorf("failed to create Docker executor: %w", err)
-			}
 		} else {
-			exec = executor.NewLocalExecutor(types.LocalConfig{
+			execBuilder = executor.NewLocalExecutorBuilder(types.LocalConfig{
 				AllowUnregisteredCommands: true,
 			}, nil)
 		}
@@ -50,12 +46,19 @@ var serverCmd = &cobra.Command{
 				return fmt.Errorf("failed to create auditor: %w", err)
 			}
 
-			// 创建审计执行器
-			exec = executor.NewAuditedExecutor(exec, auditor)
+			// 创建审计执行器构建器
+			origBuilder := execBuilder
+			execBuilder = types.ExecutorBuilderFunc(func() (types.Executor, error) {
+				exec, err := origBuilder.Build()
+				if err != nil {
+					return nil, err
+				}
+				return executor.NewAuditedExecutor(exec, auditor), nil
+			})
 		}
 
 		// 创建服务器
-		srv := server.NewServer(exec, serverAddr)
+		srv := server.NewServer(execBuilder, serverAddr)
 
 		// 启动服务器
 		if err := srv.Start(); err != nil {

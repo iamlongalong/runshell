@@ -97,16 +97,16 @@ func (m *MemorySessionManager) UpdateSession(session *types.Session) error {
 
 // CreateExecutor 创建执行器
 func CreateExecutor(req *types.SessionRequest) (types.Executor, error) {
+	var builder types.ExecutorBuilder
+
 	switch req.ExecutorType {
 	case types.ExecutorTypeLocal:
-		return executor.NewLocalExecutor(*req.LocalConfig, req.Options), nil
+		builder = executor.NewLocalExecutorBuilder(*req.LocalConfig, req.Options)
 	case types.ExecutorTypeDocker:
-		exec, err := executor.NewDockerExecutor(*req.DockerConfig, req.Options)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Docker executor: %w", err)
-		}
-		return exec, nil
+		builder = executor.NewDockerExecutorBuilder(*req.DockerConfig, req.Options)
 	default:
 		return nil, fmt.Errorf("unsupported executor type: %s", req.ExecutorType)
 	}
+
+	return builder.Build()
 }

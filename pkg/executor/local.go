@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"al.essio.dev/pkg/shellescape"
 	"github.com/iamlongalong/runshell/pkg/log"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
@@ -196,45 +197,126 @@ func (e *LocalExecutor) UnregisterCommand(name string) error {
 // executePipeline 执行管道命令
 func (e *LocalExecutor) executePipeline(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx.PipeContext == nil || len(ctx.PipeContext.Commands) == 0 {
-		return nil, fmt.Errorf("invalid pipeline context")
+		return nil, fmt.Errorf("no commands in pipeline")
 	}
 
-	var lastResult *types.ExecuteResult
-	var lastOutput io.Reader
+	// 检查命令是否为空
+	for _, cmd := range ctx.PipeContext.Commands {
+		if cmd == nil || cmd.Command == "" {
+			return nil, fmt.Errorf("command not found")
+		}
+	}
+
+	// 检查是否允许执行未注册的命令
+	if !e.config.AllowUnregisteredCommands {
+		for _, cmd := range ctx.PipeContext.Commands {
+			if _, ok := e.commands.Load(cmd.Command); !ok {
+				return nil, fmt.Errorf("unregistered command not allowed: %s", cmd.Command)
+			}
+		}
+	}
 
 	startTime := types.GetTimeNow()
 
-	for i, pipeCmd := range ctx.PipeContext.Commands {
-		cmdCtx := &types.ExecuteContext{
-			Context: ctx.Context,
-			Command: types.Command{
-				Command: pipeCmd.Command,
-				Args:    pipeCmd.Args,
-			},
-			Options:  ctx.Options,
-			Executor: ctx.Executor,
+	// 使用 bash -c 来实现
+	cmds := []string{}
+	for _, cmd := range ctx.PipeContext.Commands {
+		if len(cmd.Args) > 0 {
+			// 只对包含空格的参数进行简单的引号包裹
+			quotedArgs := make([]string, len(cmd.Args))
+			for i, arg := range cmd.Args {
+				quotedArgs[i] = shellescape.Quote(arg)
+			}
+			cmds = append(cmds, fmt.Sprintf("%s %s", cmd.Command, strings.Join(quotedArgs, " ")))
+		} else {
+			cmds = append(cmds, cmd.Command)
 		}
+	}
+	cmdStr := strings.Join(cmds, " | ")
 
-		if i > 0 && lastOutput != nil {
-			cmdCtx.Options.Stdin = lastOutput
+	// Create command with explicit shell
+	cmd := exec.CommandContext(ctx.Context, "bash", "-c", cmdStr)
+	var stdoutBuf, stderrBuf bytes.Buffer
+
+	// Set up output redirection
+	if ctx.PipeContext != nil && ctx.PipeContext.Options != nil {
+		if ctx.PipeContext.Options.Stdin != nil {
+			cmd.Stdin = ctx.PipeContext.Options.Stdin
 		}
-
-		var outputBuf bytes.Buffer
-		cmdCtx.Options.Stdout = &outputBuf
-
-		result, err := e.executeCommand(cmdCtx)
-		if err != nil {
-			return result, err
+		if ctx.PipeContext.Options.Stdout != nil {
+			cmd.Stdout = ctx.PipeContext.Options.Stdout
+		} else {
+			cmd.Stdout = &stdoutBuf
 		}
-
-		lastResult = result
-		lastOutput = strings.NewReader(outputBuf.String())
+		if ctx.PipeContext.Options.Stderr != nil {
+			cmd.Stderr = ctx.PipeContext.Options.Stderr
+		} else {
+			cmd.Stderr = &stderrBuf
+		}
+	} else {
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
 	}
 
-	if lastResult != nil {
-		lastResult.StartTime = startTime
-		lastResult.EndTime = types.GetTimeNow()
+	// Execute command
+	err := cmd.Run()
+	endTime := types.GetTimeNow()
+
+	// Check context cancellation
+	if ctx.Context != nil && ctx.Context.Err() != nil {
+		return nil, ctx.Context.Err()
 	}
 
-	return lastResult, nil
+	// Prepare result
+	result := &types.ExecuteResult{
+		CommandName: cmdStr,
+		StartTime:   startTime,
+		EndTime:     endTime,
+	}
+
+	// Get output from buffer if not using direct output
+	if ctx.PipeContext == nil || ctx.PipeContext.Options == nil || ctx.PipeContext.Options.Stdout == nil {
+		result.Output = stdoutBuf.String()
+		if stderrBuf.Len() > 0 {
+			if result.Output != "" {
+				result.Output += "\n"
+			}
+			result.Output += stderrBuf.String()
+		}
+	}
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			result.ExitCode = 1
+		}
+		result.Error = err
+		return result, err
+	}
+
+	result.ExitCode = 0
+	return result, nil
+}
+
+// LocalExecutorBuilder 构建本地执行器的构建器
+type LocalExecutorBuilder struct {
+	config  types.LocalConfig
+	options *types.ExecuteOptions
+}
+
+// NewLocalExecutorBuilder 创建新的本地执行器构建器
+func NewLocalExecutorBuilder(config types.LocalConfig, options *types.ExecuteOptions) *LocalExecutorBuilder {
+	if options == nil {
+		options = &types.ExecuteOptions{}
+	}
+	return &LocalExecutorBuilder{
+		config:  config,
+		options: options,
+	}
+}
+
+// Build 实现 ExecutorBuilder 接口
+func (b *LocalExecutorBuilder) Build() (types.Executor, error) {
+	return NewLocalExecutor(b.config, b.options), nil
 }

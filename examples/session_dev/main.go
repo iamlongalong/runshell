@@ -26,16 +26,15 @@ func createSession(projectDir string) (string, error) {
 	reqBody := types.SessionRequest{
 		ExecutorType: types.ExecutorTypeDocker,
 		DockerConfig: &types.DockerConfig{
-			Image:   dockerImage,
-			WorkDir: executor.DefaultWorkDir,
+			Image:                     dockerImage,
+			WorkDir:                   executor.DefaultWorkDir,
+			AllowUnregisteredCommands: true,
+			BindMount:                 fmt.Sprintf("%s:%s", projectDir, executor.DefaultWorkDir),
 		},
 		Options: &types.ExecuteOptions{
 			WorkDir: executor.DefaultWorkDir,
 			Env: map[string]string{
 				"GOPROXY": "https://goproxy.cn,direct",
-			},
-			Metadata: map[string]string{
-				"bind_mount": fmt.Sprintf("%s:%s", projectDir, executor.DefaultWorkDir),
 			},
 		},
 	}
@@ -176,29 +175,8 @@ func deleteSession(sessionID string) error {
 }
 
 func main() {
-	// 创建执行器和服务器
-	exec := executor.NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-	srv := server.NewServer(exec, ":8081")
-
-	// 启动服务器
-	go func() {
-		log.Printf("Starting server on %s...\n", serverAddr)
-		if err := srv.Start(); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
-		}
-	}()
-
-	// 等待服务器启动
-	time.Sleep(2 * time.Second)
-
-	// 创建项目目录（在用户主目录下）
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("Failed to get home directory: %v", err)
-	}
-	projectDir := filepath.Join(homeDir, "runshell-projects", "hello-world")
+	// 创建项目目录（在临时目录下）
+	projectDir := filepath.Join("/tmp", "runshell-projects", "hello-world")
 
 	// 确保目录不存在
 	if err := os.RemoveAll(projectDir); err != nil {
@@ -216,6 +194,27 @@ func main() {
 	}
 
 	log.Printf("Project directory: %s\n", projectDir)
+
+	// 创建服务器
+	srv := server.NewServer(executor.NewDockerExecutorBuilder(types.DockerConfig{
+		Image:                     dockerImage,
+		AllowUnregisteredCommands: true,
+		WorkDir:                   executor.DefaultWorkDir,
+		BindMount:                 fmt.Sprintf("%s:%s", projectDir, executor.DefaultWorkDir),
+	}, &types.ExecuteOptions{
+		WorkDir: executor.DefaultWorkDir,
+	}), ":8081")
+
+	// 启动服务器
+	go func() {
+		log.Printf("Starting server on %s...\n", serverAddr)
+		if err := srv.Start(); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// 等待服务器启动
+	time.Sleep(2 * time.Second)
 
 	// 创建会话
 	log.Println("Creating session...")
@@ -250,14 +249,30 @@ func main() {
 	fmt.Println("\nThank you for using RunShell!")
 }`
 
-	if err := os.WriteFile(filepath.Join(projectDir, "info.go"), []byte(code), 0666); err != nil {
+	// 创建 info.go 文件
+	infoGoPath := filepath.Join(projectDir, "info.go")
+	if err := os.WriteFile(infoGoPath, []byte(code), 0666); err != nil {
 		log.Fatalf("Failed to create info.go: %v", err)
 	}
+
+	// 确保文件权限正确
+	if err := os.Chmod(infoGoPath, 0666); err != nil {
+		log.Fatalf("Failed to set file permissions: %v", err)
+	}
+
+	// 等待一下确保文件系统同步
+	time.Sleep(time.Second)
 
 	// 初始化 Go 模块
 	log.Println("Initializing Go module...")
 	if err := execCommand(sessionID, "go", "mod", "init", "example"); err != nil {
 		log.Fatalf("Failed to initialize module: %v", err)
+	}
+
+	// 检查文件是否在容器中可见
+	log.Println("Checking if file is visible in container...")
+	if err := execCommand(sessionID, "ls", "-la"); err != nil {
+		log.Fatalf("Failed to list directory: %v", err)
 	}
 
 	// 运行程序

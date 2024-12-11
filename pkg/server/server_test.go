@@ -17,7 +17,7 @@ import (
 
 func TestHealthEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&executor.MockExecutor{}, ":8080")
+	server := NewServer(executor.NewMockExecutorBuilder(&executor.MockExecutor{}), ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -50,7 +50,7 @@ func TestExecEndpoint(t *testing.T) {
 		}
 
 		// 创建服务器
-		server := NewServer(mockExec, ":8080")
+		server := NewServer(executor.NewMockExecutorBuilder(mockExec), ":8080")
 
 		// 创建请求体
 		reqBody := ExecRequest{
@@ -79,7 +79,7 @@ func TestExecEndpoint(t *testing.T) {
 
 	t.Run("invalid request", func(t *testing.T) {
 		// 创建服务器
-		server := NewServer(&executor.MockExecutor{}, ":8080")
+		server := NewServer(executor.NewMockExecutorBuilder(&executor.MockExecutor{}), ":8080")
 
 		// 创建无效的请求体
 		reqBody := []byte(`{invalid json}`)
@@ -98,7 +98,7 @@ func TestExecEndpoint(t *testing.T) {
 
 func TestListCommandsEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&executor.MockExecutor{}, ":8080")
+	server := NewServer(executor.NewMockExecutorBuilder(&executor.MockExecutor{}), ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/commands", nil)
@@ -119,7 +119,7 @@ func TestListCommandsEndpoint(t *testing.T) {
 
 func TestCommandHelpEndpoint(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&executor.MockExecutor{}, ":8080")
+	server := NewServer(executor.NewMockExecutorBuilder(&executor.MockExecutor{}), ":8080")
 
 	// 创建测试请求
 	req := httptest.NewRequest("GET", "/help?command=test", nil)
@@ -135,7 +135,7 @@ func TestCommandHelpEndpoint(t *testing.T) {
 
 func TestServerStartStop(t *testing.T) {
 	// 创建服务器
-	server := NewServer(&executor.MockExecutor{}, ":0")
+	server := NewServer(executor.NewMockExecutorBuilder(&executor.MockExecutor{}), ":0")
 
 	// 启动服务器
 	err := server.Start()

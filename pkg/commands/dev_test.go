@@ -167,17 +167,23 @@ func TestPythonCommand(t *testing.T) {
 			// 创建模拟执行器
 			mockExec := &executor.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					output := "Python 3.9.0"
+					ctx.Options.Stdout.Write([]byte(output))
 					return &types.ExecuteResult{
 						CommandName: ctx.Command.Command,
 						ExitCode:    0,
+						Output:      output,
 					}, nil
 				},
 			}
+			buf := &bytes.Buffer{}
 			cmd := &PythonCommand{}
 			ctx := &types.ExecuteContext{
-				Context:  context.Background(),
-				Command:  types.Command{Args: tt.args},
-				Options:  &types.ExecuteOptions{},
+				Context: context.Background(),
+				Command: types.Command{Args: tt.args},
+				Options: &types.ExecuteOptions{
+					Stdout: buf,
+				},
 				Executor: mockExec,
 			}
 

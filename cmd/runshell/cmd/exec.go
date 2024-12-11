@@ -30,61 +30,28 @@ var execCmd = &cobra.Command{
 		var exec types.Executor
 		var err error
 		if execDockerImage != "" {
-			exec, err = executor.NewDockerExecutor(types.DockerConfig{
+			exec, err = executor.NewDockerExecutorBuilder(types.DockerConfig{
 				Image: execDockerImage,
-			}, nil)
+			}, nil).Build()
 			if err != nil {
 				return fmt.Errorf("failed to create Docker executor: %w", err)
 			}
 		} else {
-			exec = executor.NewLocalExecutor(types.LocalConfig{
+			exec, err = executor.NewLocalExecutorBuilder(types.LocalConfig{
 				AllowUnregisteredCommands: true,
-			}, nil)
+			}, nil).Build()
+			if err != nil {
+				return fmt.Errorf("failed to create local executor: %w", err)
+			}
 		}
 
 		// 创建管道执行器
 		pipeExec := executor.NewPipelineExecutor(exec)
 
-		// 检查是否包含管道符
-		cmdStr := strings.Join(args, " ")
-		if strings.Contains(cmdStr, "|") {
-			// 解析管道命令
-			pipeline, err := pipeExec.ParsePipeline(cmdStr)
-			if err != nil {
-				return fmt.Errorf("failed to parse pipeline: %w", err)
-			}
-
-			// 设置执行选项
-			pipeline.Options = &types.ExecuteOptions{
-				WorkDir: execWorkDir,
-				Env:     parseEnvVars(execEnvVars),
-				Stdin:   os.Stdin,
-				Stdout:  os.Stdout,
-				Stderr:  os.Stderr,
-			}
-			pipeline.Context = cmd.Context()
-
-			// 执行管道命令
-			result, err := pipeExec.ExecutePipeline(pipeline)
-			if err != nil {
-				// 检查是否是 grep 命令没有匹配项的情况
-				if strings.Contains(cmdStr, "grep") && result != nil && result.ExitCode == 1 {
-					return nil
-				}
-				return fmt.Errorf("failed to execute pipeline: %w", err)
-			}
-
-			if result.ExitCode != 0 {
-				return fmt.Errorf("pipeline failed with exit code %d", result.ExitCode)
-			}
-
-			return nil
-		}
-
 		// 非管道命令的处理
 		ctx := &types.ExecuteContext{
 			Context: cmd.Context(),
-			Command: types.Command{Command: args[0]},
+			Command: types.Command{Command: args[0], Args: args[1:]},
 			Options: &types.ExecuteOptions{
 				WorkDir: execWorkDir,
 				Env:     parseEnvVars(execEnvVars),
@@ -95,7 +62,7 @@ var execCmd = &cobra.Command{
 			Executor: exec,
 		}
 
-		result, err := exec.Execute(ctx)
+		result, err := pipeExec.Execute(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to execute command: %w", err)
 		}

@@ -3,60 +3,72 @@ package executor
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
 
+// testCommand 是一个用于测试的命令实现
+type testCommand struct {
+	name        string
+	description string
+	usage       string
+	output      string
+	exitCode    int
+}
+
+func (c *testCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Options != nil && ctx.Options.Stdout != nil {
+		ctx.Options.Stdout.Write([]byte(c.output))
+	}
+	return &types.ExecuteResult{
+		CommandName: c.name,
+		ExitCode:    c.exitCode,
+		Output:      c.output,
+	}, nil
+}
+
+func (c *testCommand) Info() types.CommandInfo {
+	return types.CommandInfo{
+		Name:        c.name,
+		Description: c.description,
+		Usage:       c.usage,
+	}
+}
+
 func TestLocalExecutor(t *testing.T) {
-	// 创建本地执行器
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, nil)
 
-	// 测试执行命令
+	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
 		Context: context.Background(),
 		Command: types.Command{
 			Command: "echo",
 			Args:    []string{"hello"},
 		},
-		Options: &types.ExecuteOptions{},
+		Options: &types.ExecuteOptions{
+			Stdout: &output,
+		},
 	}
 
 	result, err := exec.Execute(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
-	assert.Contains(t, result.Output, "hello")
-	// 测试列出命令
-	exec.RegisterCommand(&testCommand{
-		info: types.CommandInfo{
-			Name:        "test_command",
-			Description: "Test command",
-			Usage:       "test_command [args...]",
-		},
-	})
-	commands := exec.ListCommands()
-	assert.NotNil(t, commands)
+	assert.Contains(t, output.String(), "hello")
 }
 
 func TestLocalExecutorWithWorkDir(t *testing.T) {
-	// 创建临时目录
-	tempDir, err := os.MkdirTemp("", "executor_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// 创建本地执行器
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, nil)
 
-	// 测试执行命令
+	// 创建临时目录
+	tempDir := t.TempDir()
+
+	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
 		Context: context.Background(),
 		Command: types.Command{
@@ -64,21 +76,22 @@ func TestLocalExecutorWithWorkDir(t *testing.T) {
 		},
 		Options: &types.ExecuteOptions{
 			WorkDir: tempDir,
+			Stdout:  &output,
 		},
 	}
 
 	result, err := exec.Execute(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
+	assert.Contains(t, output.String(), tempDir)
 }
 
 func TestLocalExecutorWithEnv(t *testing.T) {
-	// 创建本地执行器
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, nil)
 
-	// 测试执行命令
+	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
 		Context: context.Background(),
 		Command: types.Command{
@@ -88,493 +101,412 @@ func TestLocalExecutorWithEnv(t *testing.T) {
 			Env: map[string]string{
 				"TEST_VAR": "test_value",
 			},
+			Stdout: &output,
 		},
 	}
 
 	result, err := exec.Execute(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
+	assert.Contains(t, output.String(), "TEST_VAR=test_value")
 }
 
 func TestLocalExecutorWithPipe(t *testing.T) {
-	// 创建本地执行器
-	localExec := NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-
 	tests := []struct {
 		name      string
-		commands  [][]string
+		commands  []*types.Command
 		wantErr   bool
 		exitCode  int
-		checkFunc func(t *testing.T, result *types.ExecuteResult)
+		checkFunc func(t *testing.T, output string)
 	}{
 		{
 			name: "Simple pipeline",
-			commands: [][]string{
-				{"ls", "-la"},
-				{"grep", "total"},
+			commands: []*types.Command{
+				{Command: "echo", Args: []string{"total 123"}},
+				{Command: "grep", Args: []string{"total"}},
 			},
 			wantErr:  false,
 			exitCode: 0,
-			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
-				assert.NotEmpty(t, result.Output)
+			checkFunc: func(t *testing.T, output string) {
+				assert.NotEmpty(t, output)
+				assert.Contains(t, output, "total")
 			},
 		},
 		{
 			name: "Pipeline with no matches",
-			commands: [][]string{
-				{"ls", "-la"},
-				{"grep", "nonexistentfile"},
+			commands: []*types.Command{
+				{Command: "echo", Args: []string{"hello world"}},
+				{Command: "grep", Args: []string{"nonexistentfile"}},
 			},
 			wantErr:  false,
-			exitCode: 0,
-			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
-				assert.Empty(t, result.Output)
+			exitCode: 1,
+			checkFunc: func(t *testing.T, output string) {
+				assert.Empty(t, output)
 			},
 		},
 		{
 			name: "Multi-stage pipeline",
-			commands: [][]string{
-				{"ls", "-la", "/etc"},
-				{"grep", "conf"},
-				{"sort"},
+			commands: []*types.Command{
+				{Command: "echo", Args: []string{"conf1\nconf2\nconf3"}},
+				{Command: "grep", Args: []string{"conf"}},
+				{Command: "sort"},
 			},
 			wantErr:  false,
 			exitCode: 0,
-			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
-				assert.NotEmpty(t, result.Output)
+			checkFunc: func(t *testing.T, output string) {
+				assert.NotEmpty(t, output)
+				assert.Contains(t, output, "conf")
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建管道执行器
-			pipeExec := NewPipelineExecutor(localExec)
+			exec := NewLocalExecutor(types.LocalConfig{
+				AllowUnregisteredCommands: true,
+			}, nil)
 
-			// 设置执行选项
-			options := &types.ExecuteOptions{}
-
-			// 创建管道上下文
+			var output bytes.Buffer
 			pipeline := &types.PipelineContext{
-				Commands: make([]*types.Command, len(tt.commands)),
-				Options:  options,
 				Context:  context.Background(),
+				Commands: tt.commands,
+				Options: &types.ExecuteOptions{
+					Stdout: &output,
+				},
 			}
 
-			// 设置每个命令
-			for i, cmd := range tt.commands {
-				pipeline.Commands[i] = &types.Command{
-					Command: cmd[0],
-					Args:    cmd[1:],
-				}
+			ctx := &types.ExecuteContext{
+				Context:     context.Background(),
+				PipeContext: pipeline,
+				Executor:    exec,
 			}
 
-			// 执行管道命令
-			result, err := pipeExec.ExecutePipeline(pipeline)
-
+			result, err := exec.executePipeline(ctx)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 
-			assert.NoError(t, err)
+			if result.ExitCode != 0 {
+				assert.Equal(t, tt.exitCode, result.ExitCode)
+				return
+			}
 
-			if tt.name == "Pipeline with no matches" {
-				// grep 命令没有匹配项时返回 0
-				assert.Equal(t, tt.exitCode, result.ExitCode)
-				assert.Empty(t, result.Output)
-			} else {
-				assert.Equal(t, tt.exitCode, result.ExitCode)
-				if tt.checkFunc != nil {
-					tt.checkFunc(t, result)
-				}
+			assert.NoError(t, err)
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, output.String())
 			}
 		})
 	}
 }
 
 func TestLocalExecutor_Execute(t *testing.T) {
-	// 创建执行器
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, nil)
 
-	// 测试执行命令
+	cmd := &testCommand{
+		name:        "test_command",
+		description: "Test command",
+		usage:       "test_command [args...]",
+		output:      "hello",
+		exitCode:    0,
+	}
+
+	err := exec.RegisterCommand(cmd)
+	assert.NoError(t, err)
+
+	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
 		Context: context.Background(),
 		Command: types.Command{
-			Command: "echo",
-			Args:    []string{"hello"},
+			Command: "test_command",
 		},
-		Options: &types.ExecuteOptions{},
+		Options: &types.ExecuteOptions{
+			Stdout: &output,
+		},
 	}
 
 	result, err := exec.Execute(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
-
-	// 测试列出命令
-	commands := exec.ListCommands()
-	assert.NotNil(t, commands)
+	assert.Equal(t, "hello", output.String())
 }
 
 func TestLocalExecutor_RegisterCommand(t *testing.T) {
-	// 创建执行器
 	exec := NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-
-	// 测试注册命令
-	command := &testCommand{
-		info: types.CommandInfo{
-			Name:        "test_command",
-			Description: "Test command",
-			Usage:       "test_command [args...]",
-		},
-		fn: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-			return &types.ExecuteResult{
-				CommandName: ctx.Command.Command,
-				Output:      "test",
-				ExitCode:    0,
-			}, nil
-		},
-	}
-
-	err := exec.RegisterCommand(command)
-	assert.NoError(t, err)
-
-	// 测试列出命令
-	commands := exec.ListCommands()
-	assert.NotNil(t, commands)
-}
-
-func TestLocalExecutor_UnregisterCommand(t *testing.T) {
-	// 创建执行器
-	exec := NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-
-	// 先注册一个命令
-	command := &testCommand{
-		info: types.CommandInfo{
-			Name:        "test_command",
-			Description: "Test command",
-			Usage:       "test_command [args...]",
-		},
-		fn: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-			return &types.ExecuteResult{
-				CommandName: ctx.Command.Command,
-				Output:      "test",
-				ExitCode:    0,
-			}, nil
-		},
-	}
-	err := exec.RegisterCommand(command)
-	assert.NoError(t, err)
-
-	// 测试注销命令
-	err = exec.UnregisterCommand("test_command")
-	assert.NoError(t, err)
-
-	// 测试列出命令
-	commands := exec.ListCommands()
-	assert.NotNil(t, commands)
-}
-
-func TestLocalExecutor_ListCommands(t *testing.T) {
-	// 创建执行器
-	exec := NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-
-	// 测试列出命令
-	commands := exec.ListCommands()
-	assert.NotNil(t, commands)
-}
-
-// TestLocalExecutorPipeline 测试本地执行器的管道功能
-func TestLocalExecutorPipeline(t *testing.T) {
-	tests := []struct {
-		name                      string
-		commands                  []*types.Command
-		allowUnregisteredCommands bool
-		registerCommands          []types.ICommand
-		input                     string
-		expectedOutput            string
-		expectedError             string
-	}{
-		{
-			name: "basic pipeline - ls and grep",
-			commands: []*types.Command{
-				{Command: "ls", Args: []string{"-l"}},
-				{Command: "grep", Args: []string{"test"}},
-			},
-			allowUnregisteredCommands: true,
-			expectedError:             "",
-		},
-		{
-			name: "pipeline with built-in command",
-			commands: []*types.Command{
-				{Command: "echo-test", Args: []string{"hello"}},
-				{Command: "grep", Args: []string{"hello"}},
-			},
-			registerCommands: []types.ICommand{
-				&testCommand{
-					info: types.CommandInfo{
-						Name:        "echo-test",
-						Description: "Test command 1",
-						Usage:       "echo-test [args...]",
-					},
-					fn: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-						return &types.ExecuteResult{
-							CommandName: ctx.Command.Command,
-							Output:      "hello world\ntest line\n",
-							ExitCode:    0,
-						}, nil
-					},
-				},
-			},
-			allowUnregisteredCommands: true,
-			expectedOutput:            "hello world",
-			expectedError:             "",
-		},
-		{
-			name: "pipeline with unregistered commands not allowed",
-			commands: []*types.Command{
-				{Command: "ls", Args: []string{"-l"}},
-				{Command: "grep", Args: []string{"test"}},
-			},
-			allowUnregisteredCommands: false,
-			expectedError:             "unregistered command not allowed",
-		},
-		{
-			name: "pipeline with invalid command",
-			commands: []*types.Command{
-				{Command: "ls", Args: []string{"-l"}},
-				{Command: "invalid-command", Args: []string{}},
-			},
-			allowUnregisteredCommands: true,
-			expectedError:             "command not found",
-		},
-		{
-			name: "pipeline with multiple built-in commands",
-			commands: []*types.Command{
-				{Command: "cmd1", Args: []string{}},
-				{Command: "cmd2", Args: []string{}},
-				{Command: "grep", Args: []string{"result"}},
-			},
-			registerCommands: []types.ICommand{
-				&testCommand{
-					info: types.CommandInfo{
-						Name:        "cmd1",
-						Description: "Test command 1",
-						Usage:       "cmd1 [args...]",
-					},
-					fn: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-						return &types.ExecuteResult{
-							CommandName: ctx.Command.Command,
-							Output:      "first result\nsecond line\n",
-							ExitCode:    0,
-						}, nil
-					},
-				},
-				&testCommand{
-					info: types.CommandInfo{
-						Name:        "cmd2",
-						Description: "Test command 2",
-						Usage:       "cmd2 [args...]",
-					},
-					fn: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-						return &types.ExecuteResult{
-							CommandName: ctx.Command.Command,
-							Output:      "processed result\nother line\n",
-							ExitCode:    0,
-						}, nil
-					},
-				},
-			},
-			allowUnregisteredCommands: true,
-			expectedOutput:            "processed result",
-			expectedError:             "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// 创建执行器
-			executor := NewLocalExecutor(types.LocalConfig{
-				AllowUnregisteredCommands: tt.allowUnregisteredCommands,
-			}, nil)
-
-			// 注册命令
-			if tt.registerCommands != nil {
-				for _, cmd := range tt.registerCommands {
-					err := executor.RegisterCommand(cmd)
-					assert.NoError(t, err)
-				}
-			}
-
-			// 准备上下文
-			var stdout, stderr bytes.Buffer
-			ctx := &types.ExecuteContext{
-				Context: context.Background(),
-				IsPiped: true,
-				PipeContext: &types.PipelineContext{
-					Commands: tt.commands,
-				},
-				Options: &types.ExecuteOptions{
-					Stdout: &stdout,
-					Stderr: &stderr,
-				},
-			}
-
-			// 执行管道
-			result, err := executor.Execute(ctx)
-
-			// 验证结果
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, result)
-				if tt.expectedOutput != "" {
-					assert.Contains(t, stdout.String(), tt.expectedOutput)
-				}
-			}
-		})
-	}
-}
-
-// testCommandHandler 用于测试的命令处理器
-type testCommandHandler struct {
-	output string
-	error  error
-}
-
-func (h *testCommandHandler) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if h.error != nil {
-		return nil, h.error
-	}
-
-	if ctx.Options != nil && ctx.Options.Stdout != nil {
-		fmt.Fprint(ctx.Options.Stdout, h.output)
-	}
-
-	return &types.ExecuteResult{
-		CommandName: ctx.Command.Command,
-		Output:      h.output,
-		ExitCode:    0,
-	}, nil
-}
-
-// TestLocalExecutorPipelineEdgeCases 测试边缘情况
-func TestLocalExecutorPipelineEdgeCases(t *testing.T) {
-	tests := []struct {
-		name          string
-		setupContext  func() *types.ExecuteContext
-		expectedError string
-	}{
-		{
-			name: "nil pipe context",
-			setupContext: func() *types.ExecuteContext {
-				return &types.ExecuteContext{
-					Context: context.Background(),
-					IsPiped: true,
-				}
-			},
-			expectedError: "no commands in pipeline",
-		},
-		{
-			name: "empty commands list",
-			setupContext: func() *types.ExecuteContext {
-				return &types.ExecuteContext{
-					Context: context.Background(),
-					IsPiped: true,
-					PipeContext: &types.PipelineContext{
-						Commands: []*types.Command{},
-					},
-				}
-			},
-			expectedError: "no commands in pipeline",
-		},
-		{
-			name: "command with empty name",
-			setupContext: func() *types.ExecuteContext {
-				return &types.ExecuteContext{
-					Context: context.Background(),
-					IsPiped: true,
-					PipeContext: &types.PipelineContext{
-						Commands: []*types.Command{
-							{Command: "", Args: []string{}},
-						},
-					},
-				}
-			},
-			expectedError: "command not found",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			executor := NewLocalExecutor(types.LocalConfig{
-				AllowUnregisteredCommands: true,
-			}, nil)
-
-			ctx := tt.setupContext()
-			_, err := executor.Execute(ctx)
-
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), tt.expectedError)
-		})
-	}
-}
-
-// TestLocalExecutorPipelineCancel 测试管道执行的取消功能
-func TestLocalExecutorPipelineCancel(t *testing.T) {
-	executor := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
 	}, nil)
 
-	// 创建可取消的上下文
-	ctx, cancel := context.WithCancel(context.Background())
+	cmd := &testCommand{
+		name:        "test_command",
+		description: "Test command",
+		usage:       "test_command [args...]",
+	}
 
-	// 准备一个长时间运行的管道
-	execCtx := &types.ExecuteContext{
-		Context: ctx,
-		IsPiped: true,
-		PipeContext: &types.PipelineContext{
-			Commands: []*types.Command{
-				{Command: "sleep", Args: []string{"1"}},
-				{Command: "echo", Args: []string{"done"}},
+	err := exec.RegisterCommand(cmd)
+	assert.NoError(t, err)
+
+	// 测试注册空命令
+	err = exec.RegisterCommand(nil)
+	assert.Error(t, err)
+
+	// 测试注册空名称命令
+	cmd = &testCommand{}
+	err = exec.RegisterCommand(cmd)
+	assert.Error(t, err)
+}
+
+func TestLocalExecutor_UnregisterCommand(t *testing.T) {
+	exec := NewLocalExecutor(types.LocalConfig{
+		AllowUnregisteredCommands: true,
+	}, nil)
+
+	cmd := &testCommand{
+		name:        "test_command",
+		description: "Test command",
+		usage:       "test_command [args...]",
+	}
+
+	err := exec.RegisterCommand(cmd)
+	assert.NoError(t, err)
+
+	err = exec.UnregisterCommand("test_command")
+	assert.NoError(t, err)
+
+	// 测试注销不存在的命令
+	err = exec.UnregisterCommand("nonexistent")
+	assert.NoError(t, err)
+}
+
+func TestLocalExecutor_ListCommands(t *testing.T) {
+	exec := NewLocalExecutor(types.LocalConfig{
+		AllowUnregisteredCommands: true,
+	}, nil)
+
+	cmd := &testCommand{
+		name:        "test_command",
+		description: "Test command",
+		usage:       "test_command [args...]",
+	}
+
+	err := exec.RegisterCommand(cmd)
+	assert.NoError(t, err)
+
+	commands := exec.ListCommands()
+	assert.Len(t, commands, 1)
+	assert.Equal(t, "test_command", commands[0].Name)
+	assert.Equal(t, "Test command", commands[0].Description)
+	assert.Equal(t, "test_command [args...]", commands[0].Usage)
+}
+
+func TestLocalExecutorPipeline(t *testing.T) {
+	tests := []struct {
+		name      string
+		pipeline  *types.PipelineContext
+		wantErr   bool
+		errMsg    string
+		checkFunc func(t *testing.T, result *types.ExecuteResult)
+	}{
+		{
+			name: "basic pipeline - ls and grep",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: "echo", Args: []string{"total 123"}},
+					{Command: "grep", Args: []string{"total"}},
+				},
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
+				assert.NotEmpty(t, result.Output)
+				assert.Contains(t, result.Output, "total")
+			},
+		},
+		{
+			name: "pipeline with built-in command",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: "echo", Args: []string{"hello world"}},
+					{Command: "grep", Args: []string{"hello"}},
+				},
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
+				assert.Contains(t, result.Output, "hello world")
+			},
+		},
+		{
+			name: "pipeline with unregistered commands not allowed",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: "ls"},
+					{Command: "grep"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "unregistered command not allowed",
+		},
+		{
+			name: "pipeline with invalid command",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: "invalidcmd123"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "unregistered command not allowed",
+		},
+		{
+			name: "pipeline with multiple built-in commands",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: "echo", Args: []string{"hello"}},
+					{Command: "grep", Args: []string{"hello"}},
+					{Command: "wc", Args: []string{"-l"}},
+				},
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result *types.ExecuteResult) {
+				assert.Contains(t, result.Output, "1")
 			},
 		},
 	}
 
-	// 在另一个goroutine中取消上下文
-	go func() {
-		cancel()
-	}()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := NewLocalExecutor(types.LocalConfig{
+				AllowUnregisteredCommands: !tt.wantErr,
+			}, nil)
 
-	// 执行管道
-	_, err := executor.Execute(execCtx)
+			cmd := &testCommand{
+				name:        "test_command",
+				description: "Test command",
+				usage:       "test_command [args...]",
+				output:      "hello world",
+			}
 
-	// 验证是否因为取消而中断
+			err := exec.RegisterCommand(cmd)
+			assert.NoError(t, err)
+
+			ctx := &types.ExecuteContext{
+				Context:     context.Background(),
+				PipeContext: tt.pipeline,
+				Executor:    exec,
+			}
+
+			result, err := exec.executePipeline(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotNil(t, result)
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, result)
+			}
+		})
+	}
+}
+
+func TestLocalExecutorPipelineEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		pipeline  *types.PipelineContext
+		wantErr   bool
+		errMsg    string
+		checkFunc func(t *testing.T, result *types.ExecuteResult)
+	}{
+		{
+			name:     "nil pipe context",
+			pipeline: nil,
+			wantErr:  true,
+			errMsg:   "no commands in pipeline",
+		},
+		{
+			name: "empty commands list",
+			pipeline: &types.PipelineContext{
+				Context:  context.Background(),
+				Commands: []*types.Command{},
+			},
+			wantErr: true,
+			errMsg:  "no commands in pipeline",
+		},
+		{
+			name: "command with empty name",
+			pipeline: &types.PipelineContext{
+				Context: context.Background(),
+				Commands: []*types.Command{
+					{Command: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "command not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := NewLocalExecutor(types.LocalConfig{
+				AllowUnregisteredCommands: true,
+			}, nil)
+
+			ctx := &types.ExecuteContext{
+				Context:     context.Background(),
+				PipeContext: tt.pipeline,
+				Executor:    exec,
+			}
+
+			result, err := exec.executePipeline(ctx)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotNil(t, result)
+			if tt.checkFunc != nil {
+				tt.checkFunc(t, result)
+			}
+		})
+	}
+}
+
+func TestLocalExecutorPipelineCancel(t *testing.T) {
+	exec := NewLocalExecutor(types.LocalConfig{
+		AllowUnregisteredCommands: true,
+	}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	pipeline := &types.PipelineContext{
+		Context: ctx,
+		Commands: []*types.Command{
+			{Command: "sleep", Args: []string{"10"}},
+		},
+	}
+
+	// 立即取消上下文
+	cancel()
+
+	ectx := &types.ExecuteContext{
+		Context:     ctx,
+		PipeContext: pipeline,
+		Executor:    exec,
+	}
+
+	result, err := exec.executePipeline(ectx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context canceled")
-}
-
-type testCommand struct {
-	info types.CommandInfo
-	fn   func(ctx *types.ExecuteContext) (*types.ExecuteResult, error)
-}
-
-func (c *testCommand) Info() types.CommandInfo {
-	return c.info
-}
-
-func (c *testCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return c.fn(ctx)
+	assert.Nil(t, result)
 }

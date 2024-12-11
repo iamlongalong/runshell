@@ -41,7 +41,15 @@ func (opts *ExecuteOptions) Merge(other *ExecuteOptions) *ExecuteOptions {
 	}
 
 	if opts == nil {
-		return other
+		opts = &ExecuteOptions{}
+	}
+
+	if opts.Env == nil {
+		opts.Env = make(map[string]string)
+	}
+
+	if opts.Metadata == nil {
+		opts.Metadata = make(map[string]string)
 	}
 
 	if opts.WorkDir == "" {
@@ -380,4 +388,20 @@ type DockerConfig struct {
 // LocalConfig 本地执行器配置
 type LocalConfig struct {
 	AllowUnregisteredCommands bool // 是否允许执行未注册的命令
+}
+
+// ExecutorBuilder 定义了执行器构建器的接口。
+// 用于创建新的执行器实例。
+type ExecutorBuilder interface {
+	// Build 创建并返回一个新的执行器实例。
+	// 每次调用都应该返回一个独立的执行器实例。
+	Build() (Executor, error)
+}
+
+// ExecutorBuilderFunc 是一个便捷的函数类型，实现了 ExecutorBuilder 接口。
+type ExecutorBuilderFunc func() (Executor, error)
+
+// Build 实现 ExecutorBuilder 接口。
+func (f ExecutorBuilderFunc) Build() (Executor, error) {
+	return f()
 }

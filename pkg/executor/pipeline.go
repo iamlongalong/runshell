@@ -15,7 +15,6 @@ type PipelineExecutor struct {
 
 // NewPipelineExecutor 创建新的管道执行器
 func NewPipelineExecutor(executor types.Executor) *PipelineExecutor {
-	log.Debug("Creating new pipeline executor")
 	return &PipelineExecutor{
 		executor: executor,
 	}
@@ -79,54 +78,73 @@ func (e *PipelineExecutor) ParsePipeline(cmdStr string) (*types.PipelineContext,
 }
 
 // ExecutePipeline 执行管道命令
-func (e *PipelineExecutor) ExecutePipeline(pipeline *types.PipelineContext) (*types.ExecuteResult, error) {
-	if len(pipeline.Commands) == 0 {
-		log.Error("Attempting to execute empty pipeline")
-		return nil, fmt.Errorf("empty pipeline")
+func (p *PipelineExecutor) executePipeline(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil || len(ctx.PipeContext.Commands) == 0 {
+		log.Error("No valid commands found in pipeline")
+		return nil, fmt.Errorf("no commands in pipeline")
 	}
 
-	log.Info("Starting pipeline execution with %d commands", len(pipeline.Commands))
-
-	// 创建执行上下文
-	ctx := &types.ExecuteContext{
-		Context: pipeline.Context,
-		Options: pipeline.Options,
-		IsPiped: true,
-		PipeContext: &types.PipelineContext{
-			Context:  pipeline.Context,
-			Commands: pipeline.Commands,
-			Options:  pipeline.Options,
-		},
+	if ctx.Options == nil {
+		ctx.Options = &types.ExecuteOptions{}
 	}
 
-	// 执行完整的管道命令
-	startTime := types.GetTimeNow()
-	result, err := e.executor.Execute(ctx)
-	endTime := types.GetTimeNow()
+	// 执行每个命令
+	for _, cmd := range ctx.PipeContext.Commands {
+		if cmd == nil || cmd.Command == "" {
+			log.Error("Command not found: %v", cmd)
+			return nil, fmt.Errorf("command not found: %v", cmd)
+		}
+	}
 
+	// Create a new context with the same options but without output duplication
+	execCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		PipeContext: ctx.PipeContext,
+		IsPiped:     true,
+		Options:     ctx.Options,
+	}
+
+	result, err := p.executor.Execute(execCtx)
 	if err != nil {
-		log.Error("Pipeline execution failed: %v", err)
-		return result, fmt.Errorf("pipeline execution failed: %w", err)
+		return result, err
 	}
 
-	log.Info("Pipeline execution completed successfully")
-	return &types.ExecuteResult{
-		CommandName: "pipeline",
-		ExitCode:    result.ExitCode,
-		StartTime:   startTime,
-		EndTime:     endTime,
-		Output:      result.Output,
-	}, nil
+	return result, nil
 }
 
 // Execute 实现 Executor 接口
 func (e *PipelineExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if ctx.PipeContext == nil {
-		log.Debug("Executing single command through pipeline executor")
-		return e.executor.Execute(ctx)
+	if ctx == nil {
+		log.Error("Execute context is nil")
+		return nil, fmt.Errorf("execute context is nil")
 	}
-	log.Debug("Executing pipeline command")
-	return e.ExecutePipeline(ctx.PipeContext)
+
+	if ctx.Command.Command == "" {
+		log.Error("No command specified")
+		return nil, fmt.Errorf("no command specified")
+	}
+
+	// 如果是管道命令
+	if strings.Contains(ctx.Command.Command, "|") {
+		// 解析管道命令
+		pipeline, err := e.ParsePipeline(ctx.Command.Command)
+		if err != nil {
+			log.Error("Failed to parse pipeline: %v", err)
+			return nil, fmt.Errorf("failed to parse pipeline: %w", err)
+		}
+
+		// 设置管道上下文
+		pipeline.Context = ctx.Context
+		pipeline.Options = ctx.Options
+		ctx.PipeContext = pipeline
+		ctx.IsPiped = true
+
+		// 执行管道命令
+		return e.executePipeline(ctx)
+	}
+
+	// 如果不是管道命令，直接执行
+	return e.executor.Execute(ctx)
 }
 
 // ListCommands 实现 Executor 接口

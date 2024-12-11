@@ -4,6 +4,7 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -90,7 +91,7 @@ const (
 	DockerExecutorName = "docker"
 )
 
-// Name 返回执行器名称
+// Name 返回执行器名
 func (e *DockerExecutor) Name() string {
 	return DockerExecutorName
 }
@@ -217,6 +218,7 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 	if ctx.Options == nil {
 		ctx.Options = &types.ExecuteOptions{}
 	}
+
 	ctx.Options = ctx.Options.Merge(e.options)
 
 	if ctx.IsPiped {
@@ -291,29 +293,29 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 
 	args = append(args, e.containerID)
 
-	// 始终使用 sh -c 来执行命令，这样可以处理带空格的命令和管道
-	args = append(args, "sh", "-c")
-
 	// 构建完整的命令字符串
+	var cctx context.Context
 	var fullCmd string
 	if ctx.IsPiped && ctx.PipeContext != nil {
+		cctx = ctx.PipeContext.Context
 		var cmdList []string
 		for _, cmd := range ctx.PipeContext.Commands {
-			cmdList = append(cmdList, cmd.Command+" "+strings.Join(cmd.Args, " "))
+			cmdList = append(cmdList, fmt.Sprintf("%s %s", cmd.Command, strings.Join(cmd.Args, " ")))
 		}
-		fullCmd = strings.Join(cmdList, " | ") + " " + strings.Join(ctx.Command.Args, " ")
+		fullCmd = strings.Join(cmdList, " | ")
 	} else {
+		cctx = ctx.Context
 		fullCmd = ctx.Command.Command + " " + strings.Join(ctx.Command.Args, " ")
 	}
 
 	log.Debug("Full shell command: %s", fullCmd)
-	args = append(args, fullCmd)
+	args = append(args, "sh", "-c", fullCmd)
 
 	log.Debug("Final docker command args: %v", args)
-	cmd := exec.CommandContext(ctx.Context, "docker", args...)
+	cmd := exec.CommandContext(cctx, "docker", args...)
 
 	// 设置输入输出
-	var stdoutBuf bytes.Buffer
+	var stdoutBuf, stderrBuf bytes.Buffer
 	if ctx.Options != nil {
 		log.Debug("Setting up standard IO for command")
 		if ctx.Options.Stdin != nil {
@@ -321,17 +323,17 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 		}
 		if ctx.Options.Stdout != nil {
 			cmd.Stdout = io.MultiWriter(&stdoutBuf, ctx.Options.Stdout)
+		} else {
+			cmd.Stdout = &stdoutBuf
 		}
 		if ctx.Options.Stderr != nil {
-			cmd.Stderr = io.MultiWriter(&stdoutBuf, ctx.Options.Stderr)
+			cmd.Stderr = io.MultiWriter(&stderrBuf, ctx.Options.Stderr)
+		} else {
+			cmd.Stderr = &stderrBuf
 		}
-	}
-
-	if cmd.Stdout == nil {
+	} else {
 		cmd.Stdout = &stdoutBuf
-	}
-	if cmd.Stderr == nil {
-		cmd.Stderr = &stdoutBuf
+		cmd.Stderr = &stderrBuf
 	}
 
 	// 执行命令
@@ -340,23 +342,31 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 	err := cmd.Run()
 	endTime := types.GetTimeNow()
 
+	// 合并输出
+	output := stdoutBuf.String()
+	if stderrBuf.Len() > 0 {
+		if output != "" {
+			output += "\n"
+		}
+		output += stderrBuf.String()
+	}
+
 	result := &types.ExecuteResult{
 		CommandName: ctx.Command.Command,
 		StartTime:   startTime,
 		EndTime:     endTime,
-		Output:      stdoutBuf.String(),
+		Output:      output,
 		Error:       err,
 	}
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
-			log.Error("Command %s failed with exit code %d: %s", fullCmd, exitErr.ExitCode(), exitErr.Stderr)
+			log.Error("Command %s failed with exit code %d: %s", fullCmd, exitErr.ExitCode(), output)
 		} else {
 			result.ExitCode = 1
 			log.Error("Command %s failed with error: %v", fullCmd, err)
 		}
-		result.Error = err
 		return result, err
 	}
 
@@ -421,4 +431,26 @@ func (e *DockerExecutor) UnregisterCommand(cmdName string) error {
 	log.Info("Unregistering command: %s", cmdName)
 	e.commands.Delete(cmdName)
 	return nil
+}
+
+// DockerExecutorBuilder 构建Docker执行器的构建器
+type DockerExecutorBuilder struct {
+	config  types.DockerConfig
+	options *types.ExecuteOptions
+}
+
+// NewDockerExecutorBuilder 创建新的Docker执行器构建器
+func NewDockerExecutorBuilder(config types.DockerConfig, options *types.ExecuteOptions) *DockerExecutorBuilder {
+	if options == nil {
+		options = &types.ExecuteOptions{}
+	}
+	return &DockerExecutorBuilder{
+		config:  config,
+		options: options,
+	}
+}
+
+// Build 实现 ExecutorBuilder 接口
+func (b *DockerExecutorBuilder) Build() (types.Executor, error) {
+	return NewDockerExecutor(b.config, b.options)
 }

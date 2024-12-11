@@ -446,3 +446,23 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
+
+// MockExecutorBuilder 构建模拟执行器的构建器
+type MockExecutorBuilder struct {
+	executor *MockExecutor
+}
+
+// NewMockExecutorBuilder 创建新的模拟执行器构建器
+func NewMockExecutorBuilder(executor *MockExecutor) *MockExecutorBuilder {
+	if executor == nil {
+		executor = NewMockExecutor()
+	}
+	return &MockExecutorBuilder{
+		executor: executor,
+	}
+}
+
+// Build 实现 ExecutorBuilder 接口
+func (b *MockExecutorBuilder) Build() (types.Executor, error) {
+	return b.executor, nil
+}

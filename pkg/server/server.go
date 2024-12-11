@@ -40,20 +40,20 @@ type ExecResponse struct {
 // - 优雅关闭
 // - 线程安全
 type Server struct {
-	executor       types.Executor
-	sessionManager types.SessionManager
-	addr           string
-	server         *http.Server
-	listener       net.Listener
-	mu             sync.Mutex
+	executorBuilder types.ExecutorBuilder
+	sessionManager  types.SessionManager
+	addr            string
+	server          *http.Server
+	listener        net.Listener
+	mu              sync.Mutex
 }
 
 // NewServer 创建新的服务器
-func NewServer(executor types.Executor, addr string) *Server {
+func NewServer(executorBuilder types.ExecutorBuilder, addr string) *Server {
 	return &Server{
-		executor:       executor,
-		sessionManager: NewMemorySessionManager(),
-		addr:           addr,
+		executorBuilder: executorBuilder,
+		sessionManager:  NewMemorySessionManager(),
+		addr:            addr,
 	}
 }
 
@@ -160,6 +160,13 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 创建执行器
+	executor, err := s.executorBuilder.Build()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create executor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	// 准备执行选项
 	opts := &types.ExecuteOptions{
 		WorkDir: req.WorkDir,
@@ -177,10 +184,10 @@ func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {
 			Args:    req.Args,
 		},
 		Options:  opts,
-		Executor: s.executor,
+		Executor: executor,
 	}
 
-	result, err := s.executor.Execute(execCtx)
+	result, err := executor.Execute(execCtx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Command execution failed: %v", err), http.StatusInternalServerError)
 		return
@@ -198,7 +205,14 @@ func (s *Server) handleListCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	commands := s.executor.ListCommands()
+	// 创建执行器
+	executor, err := s.executorBuilder.Build()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create executor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	commands := executor.ListCommands()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(commands)
@@ -217,7 +231,14 @@ func (s *Server) handleCommandHelp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	help, err := s.getCommandHelp(cmdName)
+	// 创建执行器
+	executor, err := s.executorBuilder.Build()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create executor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	help, err := s.getCommandHelp(executor, cmdName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get command help: %v", err), http.StatusNotFound)
 		return
@@ -241,9 +262,9 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 创建执行器
-		executor, err := CreateExecutor(&req)
+		executor, err := s.executorBuilder.Build()
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusBadRequest)
+			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err.Error()), http.StatusInternalServerError)
 			return
 		}
 
@@ -402,25 +423,37 @@ func (s *StreamScanner) Text() string {
 
 // executeCommand 执行命令
 func (s *Server) executeCommand(ctx context.Context, cmdName string, args []string, opts *types.ExecuteOptions) (*types.ExecuteResult, error) {
+	// 创建执行器
+	executor, err := s.executorBuilder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create executor: %w", err)
+	}
+
 	execCtx := &types.ExecuteContext{
 		Context: ctx,
 		Command: types.Command{
 			Command: cmdName,
 			Args:    args,
 		},
-		Options: opts,
+		Options:  opts,
+		Executor: executor,
 	}
-	return s.executor.Execute(execCtx)
+	return executor.Execute(execCtx)
 }
 
 // listCommands 列出所有命令
 func (s *Server) listCommands() []types.CommandInfo {
-	return s.executor.ListCommands()
+	// 创建执行器
+	executor, err := s.executorBuilder.Build()
+	if err != nil {
+		return nil
+	}
+	return executor.ListCommands()
 }
 
 // getCommandHelp 获取命令帮助信息
-func (s *Server) getCommandHelp(cmdName string) (string, error) {
-	commands := s.executor.ListCommands()
+func (s *Server) getCommandHelp(executor types.Executor, cmdName string) (string, error) {
+	commands := executor.ListCommands()
 	for _, cmd := range commands {
 		if cmd.Name == cmdName {
 			return cmd.Usage, nil

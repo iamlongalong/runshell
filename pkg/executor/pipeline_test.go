@@ -3,7 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
-	"io"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -15,17 +15,31 @@ func TestPipelineExecutor(t *testing.T) {
 	// 创建模拟执行器
 	mockExec := &MockExecutor{
 		ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-			if ctx.Command.Command == "echo" {
-				ctx.Options.Stdout.Write([]byte("hello\n"))
-			} else if ctx.Command.Command == "grep" {
-				buf := &bytes.Buffer{}
-				io.Copy(buf, ctx.Options.Stdin)
-				if strings.Contains(buf.String(), "hello") {
+			if !ctx.IsPiped {
+				return nil, fmt.Errorf("expected piped execution")
+			}
+
+			// 构建完整的命令字符串
+			var cmds []string
+			for _, cmd := range ctx.PipeContext.Commands {
+				cmds = append(cmds, fmt.Sprintf("%s %s", cmd.Command, strings.Join(cmd.Args, " ")))
+			}
+			cmdStr := strings.Join(cmds, " | ")
+
+			// 模拟执行 "echo hello | grep hello"
+			if cmdStr == "echo hello | grep hello" {
+				if ctx.Options != nil && ctx.Options.Stdout != nil {
 					ctx.Options.Stdout.Write([]byte("hello\n"))
 				}
+				return &types.ExecuteResult{
+					CommandName: cmdStr,
+					ExitCode:    0,
+					Output:      "hello\n",
+				}, nil
 			}
+
 			return &types.ExecuteResult{
-				CommandName: ctx.Command.Command,
+				CommandName: cmdStr,
 				ExitCode:    0,
 			}, nil
 		},
@@ -44,7 +58,14 @@ func TestPipelineExecutor(t *testing.T) {
 		Stdout: &output,
 	}
 
-	result, err := pipeExec.ExecutePipeline(pipeline)
+	ctx := &types.ExecuteContext{
+		Context:     context.Background(),
+		PipeContext: pipeline,
+		IsPiped:     true,
+		Options:     pipeline.Options,
+	}
+
+	result, err := pipeExec.executePipeline(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Equal(t, "hello\n", output.String())
@@ -160,7 +181,14 @@ func TestPipelineExecutor_ExecutePipeline(t *testing.T) {
 			pipeline.Context = context.Background()
 
 			// 执行管道命令
-			result, err := pipeExec.ExecutePipeline(pipeline)
+			ctx := &types.ExecuteContext{
+				Context:     context.Background(),
+				PipeContext: pipeline,
+				IsPiped:     true,
+				Options:     pipeline.Options,
+			}
+
+			result, err := pipeExec.executePipeline(ctx)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -231,7 +259,14 @@ func TestPipelineExecutor_ExecutePipelineWithError(t *testing.T) {
 			pipeline.Context = context.Background()
 
 			// 执行管道命令
-			result, err := exec.ExecutePipeline(pipeline)
+			ctx := &types.ExecuteContext{
+				Context:     context.Background(),
+				PipeContext: pipeline,
+				IsPiped:     true,
+				Options:     pipeline.Options,
+			}
+
+			result, err := exec.executePipeline(ctx)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
