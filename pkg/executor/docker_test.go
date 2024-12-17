@@ -145,114 +145,76 @@ func TestDockerExecutor_Execute(t *testing.T) {
 }
 
 func TestDockerExecutor_ExecutePipeline(t *testing.T) {
-	// 跳过如果没有 docker 命令
-	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("Docker not installed, skipping tests")
+	if testing.Short() {
+		t.Skip("Skipping Docker tests in short mode")
 	}
-
-	// 创建 Docker 执行器
-	dockerExec, err := NewDockerExecutor(types.DockerConfig{
-		Image:                     "busybox:latest",
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-	if err != nil {
-		t.Fatalf("Failed to create Docker executor: %v", err)
-	}
-	defer dockerExec.Close()
 
 	tests := []struct {
-		name      string
-		commands  []types.Command
-		wantErr   bool
-		exitCode  int
-		checkFunc func(t *testing.T, output string)
+		name          string
+		command       string
+		expectedErr   bool
+		expectedCode  int
+		expectedMatch string
 	}{
 		{
-			name: "Simple pipeline",
-			commands: []types.Command{
-				{Command: "echo", Args: []string{"total 123"}},
-				{Command: "grep", Args: []string{"total"}},
-			},
-			wantErr:  false,
-			exitCode: 0,
-			checkFunc: func(t *testing.T, output string) {
-				assert.NotEmpty(t, output)
-				assert.Contains(t, output, "total")
-			},
+			name:          "Simple pipeline",
+			command:       "echo hello | grep hello",
+			expectedErr:   false,
+			expectedCode:  0,
+			expectedMatch: "hello",
 		},
 		{
-			name: "Pipeline with no matches",
-			commands: []types.Command{
-				{Command: "echo", Args: []string{"hello world"}},
-				{Command: "grep", Args: []string{"nonexistentfile"}},
-			},
-			wantErr:  true,
-			exitCode: 1,
-			checkFunc: func(t *testing.T, output string) {
-				assert.Empty(t, output)
-			},
+			name:          "Pipeline with no matches",
+			command:       "echo hello | grep world",
+			expectedErr:   true, // grep 命令没有找到匹配时返回错误
+			expectedCode:  1,    // grep 命令没有找到匹配时返回 1
+			expectedMatch: "",
 		},
 		{
-			name: "Multi-stage pipeline",
-			commands: []types.Command{
-				{Command: "printf", Args: []string{"hello\\nworld\\ntest\\n"}},
-				{Command: "grep", Args: []string{"world"}},
-				{Command: "tr", Args: []string{"a-z", "A-Z"}},
-			},
-			wantErr:  false,
-			exitCode: 0,
-			checkFunc: func(t *testing.T, output string) {
-				assert.NotEmpty(t, output)
-				assert.Contains(t, output, "WORLD")
-			},
+			name:          "Pipeline with multiple commands",
+			command:       "echo hello | grep hello | tr a-z A-Z",
+			expectedErr:   false,
+			expectedCode:  0,
+			expectedMatch: "HELLO",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 创建管道执行器
-			pipeExec := NewPipelineExecutor(dockerExec)
+			executor, err := NewDockerExecutor(types.DockerConfig{
+				Image:   "alpine:latest",
+				WorkDir: "/workspace",
+			}, nil)
+			if err != nil {
+				t.Fatalf("Failed to create Docker executor: %v", err)
+			}
+			defer executor.Close()
 
-			// 设置执行选项
 			var output bytes.Buffer
-			pipeline := &types.PipelineContext{
-				Commands: make([]*types.Command, len(tt.commands)),
+			result, err := executor.Execute(&types.ExecuteContext{
+				Context: context.Background(),
+				Command: types.Command{
+					Command: tt.command,
+				},
 				Options: &types.ExecuteOptions{
 					Stdout: &output,
 				},
-				Context: context.Background(),
-			}
+			})
 
-			// 设置命令
-			for i := range tt.commands {
-				cmd := tt.commands[i]
-				pipeline.Commands[i] = &cmd
-			}
-
-			// 执行管道命令
-			ctx := &types.ExecuteContext{
-				Context:     context.Background(),
-				IsPiped:     true,
-				PipeContext: pipeline,
-			}
-			result, err := pipeExec.executePipeline(ctx)
-
-			if tt.wantErr {
+			if tt.expectedErr {
 				assert.Error(t, err)
 				if result != nil {
-					assert.Equal(t, tt.exitCode, result.ExitCode)
+					assert.Equal(t, tt.expectedCode, result.ExitCode)
 				}
-				if tt.checkFunc != nil {
-					tt.checkFunc(t, result.Output)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.expectedCode, result.ExitCode)
+				if tt.expectedMatch != "" {
+					assert.Contains(t, output.String(), tt.expectedMatch)
+				} else {
+					assert.Empty(t, output.String())
 				}
-				return
-			}
-
-			assert.NoError(t, err)
-			assert.NotNil(t, result)
-			assert.Equal(t, tt.exitCode, result.ExitCode)
-			if tt.checkFunc != nil {
-				tt.checkFunc(t, result.Output)
 			}
 		})
 	}

@@ -253,23 +253,12 @@ func (e *DockerExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResul
 		return command.Execute(ctx)
 	}
 
-	// 检查是否允许执行未注册的命令
-	if !e.config.AllowUnregisteredCommands {
-		// 检查是否是管道命令
-		if ctx.IsPiped && ctx.PipeContext != nil {
-			// 检查是否所有命令都支持
-			for _, cmd := range ctx.PipeContext.Commands {
-				if _, ok := e.commands.Load(cmd.Command); !ok {
-					log.Error("Command not supported: %s", cmd.Command)
-					return nil, fmt.Errorf("command not supported: %s", cmd.Command)
-				}
-			}
-		} else {
-			log.Error("Unregistered command not allowed: %s", ctx.Command)
-			return nil, fmt.Errorf("unregistered command not allowed: %s", ctx.Command)
-		}
-	}
+	// 执行普通命令
+	return e.executeCommand(ctx)
+}
 
+// executeCommand 执行具体的命令
+func (e *DockerExecutor) executeCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	// 确保容器存在并运行
 	if err := e.ensureContainer(); err != nil {
 		log.Error("Failed to ensure container for command %v: %v", ctx.Command, err)
@@ -433,24 +422,26 @@ func (e *DockerExecutor) UnregisterCommand(cmdName string) error {
 	return nil
 }
 
-// DockerExecutorBuilder 构建Docker执行器的构建器
+// DockerExecutorBuilder 是 Docker 执行器的构建器。
 type DockerExecutorBuilder struct {
 	config  types.DockerConfig
 	options *types.ExecuteOptions
 }
 
-// NewDockerExecutorBuilder 创建新的Docker执行器构建器
-func NewDockerExecutorBuilder(config types.DockerConfig, options *types.ExecuteOptions) *DockerExecutorBuilder {
-	if options == nil {
-		options = &types.ExecuteOptions{}
-	}
+// NewDockerExecutorBuilder 创建一个新的 Docker 执行器构建器。
+func NewDockerExecutorBuilder(config types.DockerConfig) *DockerExecutorBuilder {
 	return &DockerExecutorBuilder{
-		config:  config,
-		options: options,
+		config: config,
 	}
 }
 
-// Build 实现 ExecutorBuilder 接口
+// WithOptions 设置执行选项。
+func (b *DockerExecutorBuilder) WithOptions(options *types.ExecuteOptions) *DockerExecutorBuilder {
+	b.options = options
+	return b
+}
+
+// Build 构建并返回一个新的 Docker 执行器实例。
 func (b *DockerExecutorBuilder) Build() (types.Executor, error) {
 	return NewDockerExecutor(b.config, b.options)
 }

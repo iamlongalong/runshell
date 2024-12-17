@@ -26,7 +26,7 @@ func TestAuditedExecutor(t *testing.T) {
 	}
 
 	// 创建模拟执行器
-	mockExec := &MockExecutor{
+	mockExec := &types.MockExecutor{
 		ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 			return &types.ExecuteResult{
 				CommandName: ctx.Command.Command,

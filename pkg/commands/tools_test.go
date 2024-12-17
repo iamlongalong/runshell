@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,7 +38,7 @@ func TestWgetCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
 				Command:  types.Command{Command: "wget", Args: tt.args},
@@ -94,7 +93,7 @@ func TestTarCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -153,7 +152,7 @@ func TestZipCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -195,14 +194,13 @@ func TestPipCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
-				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-					ctx.Options.Stdout.Write([]byte("pip 21.0.1"))
-					return &types.ExecuteResult{
-						CommandName: ctx.Command.Command,
-						ExitCode:    0,
-					}, nil
-				},
+			mockExec := types.NewMockExecutor()
+			mockExec.ExecuteFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+				ctx.Options.Stdout.Write([]byte("pip 21.0.1"))
+				return &types.ExecuteResult{
+					CommandName: ctx.Command.Command,
+					ExitCode:    0,
+				}, nil
 			}
 
 			buf := &bytes.Buffer{}
@@ -246,14 +244,13 @@ func TestDockerCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
-				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-					ctx.Options.Stdout.Write([]byte("Docker version 20.10.8"))
-					return &types.ExecuteResult{
-						CommandName: ctx.Command.Command,
-						ExitCode:    0,
-					}, nil
-				},
+			mockExec := types.NewMockExecutor()
+			mockExec.ExecuteFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+				ctx.Options.Stdout.Write([]byte("Docker version 20.10.8"))
+				return &types.ExecuteResult{
+					CommandName: ctx.Command.Command,
+					ExitCode:    0,
+				}, nil
 			}
 
 			buf := &bytes.Buffer{}
@@ -297,14 +294,13 @@ func TestNodeCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
-				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-					ctx.Options.Stdout.Write([]byte("v16.0.0"))
-					return &types.ExecuteResult{
-						CommandName: ctx.Command.Command,
-						ExitCode:    0,
-					}, nil
-				},
+			mockExec := types.NewMockExecutor()
+			mockExec.ExecuteFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+				ctx.Options.Stdout.Write([]byte("v16.0.0"))
+				return &types.ExecuteResult{
+					CommandName: ctx.Command.Command,
+					ExitCode:    0,
+				}, nil
 			}
 
 			buf := &bytes.Buffer{}
@@ -348,14 +344,13 @@ func TestNPMCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
-				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-					ctx.Options.Stdout.Write([]byte("8.0.0"))
-					return &types.ExecuteResult{
-						CommandName: ctx.Command.Command,
-						ExitCode:    0,
-					}, nil
-				},
+			mockExec := types.NewMockExecutor()
+			mockExec.ExecuteFunc = func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+				ctx.Options.Stdout.Write([]byte("8.0.0"))
+				return &types.ExecuteResult{
+					CommandName: ctx.Command.Command,
+					ExitCode:    0,
+				}, nil
 			}
 
 			buf := &bytes.Buffer{}

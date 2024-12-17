@@ -101,12 +101,21 @@ func CreateExecutor(req *types.SessionRequest) (types.Executor, error) {
 
 	switch req.ExecutorType {
 	case types.ExecutorTypeLocal:
-		builder = executor.NewLocalExecutorBuilder(*req.LocalConfig, req.Options)
+		builder = executor.NewLocalExecutorBuilder(*req.LocalConfig).
+			WithOptions(req.Options)
 	case types.ExecutorTypeDocker:
-		builder = executor.NewDockerExecutorBuilder(*req.DockerConfig, req.Options)
+		builder = executor.NewDockerExecutorBuilder(*req.DockerConfig).
+			WithOptions(req.Options)
 	default:
 		return nil, fmt.Errorf("unsupported executor type: %s", req.ExecutorType)
 	}
 
+	return builder.Build()
+}
+
+// createLocalExecutor 创建本地执行器
+func createLocalExecutor(config types.LocalConfig, options *types.ExecuteOptions) (types.Executor, error) {
+	builder := executor.NewLocalExecutorBuilder(config).
+		WithOptions(options)
 	return builder.Build()
 }

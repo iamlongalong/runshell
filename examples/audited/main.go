@@ -35,7 +35,7 @@ func main() {
 	// 创建基础执行器
 	baseExec := executor.NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 
 	// 创建自定义审计器
 	auditor := &CustomAuditor{}
@@ -81,4 +81,4 @@ func main() {
 // 注意事项：
 // - 审计日志包含命令执行的完整生命周期
 // - 可以根据需要自定义审计器的行为
-// - 支持各种执行上下文和选项
+// - 支持各种���行上下文和选项

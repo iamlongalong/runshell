@@ -18,8 +18,8 @@ DOCKER_IMAGE=runshell
 DOCKER_TAG=$(VERSION)
 
 # 默认目标
-.PHONY: all
-all: clean test build
+.PHONY: all test examples test-all
+all: test-all
 
 # 清理构建产物
 .PHONY: clean
@@ -27,6 +27,7 @@ clean:
 	@echo "Cleaning..."
 	@rm -rf bin/
 	@$(GOCLEAN)
+	@rm -rf /tmp/runshell-*
 
 # 更新依赖
 .PHONY: deps
@@ -130,4 +131,12 @@ help:
 	@echo "  make fmt          - Format code"
 	@echo "  make lint         - Check code style"
 	@echo "  make tag          - Create a new Git tag"
-	@echo "  make help         - Show this help" 
+	@echo "  make help         - Show this help"
+
+# 运行所有示例
+examples:
+	./script/run_examples.sh
+
+# 运行所有测试和示例
+test-all: test examples
+	@echo "All tests and examples completed successfully!"

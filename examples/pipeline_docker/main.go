@@ -13,7 +13,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"log"
+	"strings"
 
 	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
@@ -21,43 +22,28 @@ import (
 
 func main() {
 	// 创建 Docker 执行器
-	// 使用 busybox:latest 作为基础镜像，它体积小但包含常用的 Unix 工具
-	exec, err := executor.NewDockerExecutorBuilder(types.DockerConfig{
+	dockerExec, err := executor.NewDockerExecutorBuilder(types.DockerConfig{
 		Image:                     "ubuntu:latest",
+		WorkDir:                   "/workspace",
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{}).Build()
+	}).WithOptions(&types.ExecuteOptions{}).Build()
 	if err != nil {
-		fmt.Printf("Failed to create Docker executor: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("Failed to create Docker executor: %v", err)
 	}
 	// 确保在程序退出时清理 Docker 资源
-	defer exec.Close()
+	defer dockerExec.Close()
 
 	// 创建管道执行器
 	// PipelineExecutor 封装了管道命令的解析和执行逻辑
-	pipeExec := executor.NewPipelineExecutor(exec)
-	result, err := pipeExec.Execute(&types.ExecuteContext{
-		Context: context.Background(),
-		Command: types.Command{
-			Command: "ls -al | grep s",
-		},
-	})
+	pipeExec := executor.NewPipelineExecutor(dockerExec)
 
-	// 处理执行错误
-	if err != nil {
-		fmt.Printf("Failed to execute pipeline command: %v\n", err)
-		os.Exit(1)
-	}
-
-	// 打印命令执行结果
-	fmt.Printf("Command Output:\n%s\n", result.Output)
-	fmt.Printf("Exit Code: %d\n", result.ExitCode)
-
-	// 演示更多管道命令示例
+	// 演示管道命令示例
 	examples := []string{
+		"ls -al | grep s",
 		"echo 'Hello World' | grep Hello",
 		"cat /etc/passwd | grep root | cut -d: -f1",
 		"ps aux | grep bash | wc -l",
+		"echo 'test' | grep nonexistent", // 这个命令预期会返回非零退出码
 	}
 
 	for _, cmd := range examples {
@@ -70,7 +56,12 @@ func main() {
 		})
 
 		if err != nil {
-			fmt.Printf("Failed to execute command: %v\n", err)
+			// 检查是否是 grep 命令没有找到匹配项
+			if result != nil && result.ExitCode == 1 && strings.Contains(cmd, "grep") {
+				fmt.Printf("No matches found\n")
+				continue
+			}
+			fmt.Printf("Error executing command: %v\n", err)
 			continue
 		}
 

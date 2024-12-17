@@ -38,7 +38,7 @@ func setupTestEnv(t *testing.T) (string, func()) {
 func createTestManager(t *testing.T, rootDir string) *ScriptManager {
 	manager, err := NewScriptManager(&Config{
 		RootDir:  rootDir,
-		Executor: &mockExecutor{},
+		Executor: types.NewMockExecutor(),
 	}, nil)
 	require.NoError(t, err)
 	return manager
@@ -501,7 +501,7 @@ func TestScriptDiscovery(t *testing.T) {
 	assert.Equal(t, len(scripts), len(commands))
 }
 
-// TestCreateScriptEdgeCases 测试���建脚本的边缘情况
+// TestCreateScriptEdgeCases 测试建脚本的边缘情况
 func TestCreateScriptEdgeCases(t *testing.T) {
 	rootDir, cleanup := setupTestEnv(t)
 	defer cleanup()
@@ -792,7 +792,7 @@ func TestConcurrentAccess(t *testing.T) {
 	wg.Wait()
 	close(errChan)
 
-	// 检查���否有错误发生
+	// 检查否有错误发生
 	for err := range errChan {
 		assert.NoError(t, err)
 	}

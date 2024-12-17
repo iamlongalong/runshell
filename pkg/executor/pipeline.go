@@ -33,6 +33,19 @@ func (e *PipelineExecutor) Name() string {
 func (e *PipelineExecutor) ParsePipeline(cmdStr string) (*types.PipelineContext, error) {
 	log.Debug("Parsing pipeline command: %s", cmdStr)
 
+	// 检查命令字符串是否为空
+	cmdStr = strings.TrimSpace(cmdStr)
+	if cmdStr == "" {
+		log.Error("Empty pipeline command")
+		return nil, fmt.Errorf("empty pipeline")
+	}
+
+	// 检查管道符号位置
+	if strings.HasPrefix(cmdStr, "|") || strings.HasSuffix(cmdStr, "|") {
+		log.Error("Invalid pipeline: starts or ends with pipe symbol")
+		return nil, fmt.Errorf("invalid pipeline: starts or ends with pipe symbol")
+	}
+
 	// 按管道符分割命令
 	cmds := strings.Split(cmdStr, "|")
 	if len(cmds) == 0 {
@@ -50,15 +63,47 @@ func (e *PipelineExecutor) ParsePipeline(cmdStr string) (*types.PipelineContext,
 	for i, cmd := range cmds {
 		cmd = strings.TrimSpace(cmd)
 		if cmd == "" {
-			log.Debug("Skipping empty command at position %d", i+1)
-			continue
+			log.Error("Empty command at position %d", i+1)
+			return nil, fmt.Errorf("empty command at position %d", i+1)
 		}
 
-		// 分割命令和参数
-		parts := strings.Fields(cmd)
+		// 分割命令和参数，保留引号内的空格
+		var parts []string
+		var current string
+		var inQuote bool
+		var quoteChar rune
+
+		for _, r := range cmd {
+			switch {
+			case r == '"' || r == '\'':
+				if !inQuote {
+					inQuote = true
+					quoteChar = r
+				} else if quoteChar == r {
+					inQuote = false
+					if current != "" {
+						parts = append(parts, current)
+						current = ""
+					}
+				} else {
+					current += string(r)
+				}
+			case r == ' ' && !inQuote:
+				if current != "" {
+					parts = append(parts, current)
+					current = ""
+				}
+			default:
+				current += string(r)
+			}
+		}
+		if current != "" {
+			parts = append(parts, current)
+		}
+
 		if len(parts) == 0 {
-			log.Debug("Skipping invalid command at position %d", i+1)
-			continue
+			log.Error("Invalid command at position %d", i+1)
+			return nil, fmt.Errorf("invalid command at position %d", i+1)
 		}
 
 		log.Debug("Adding command to pipeline: %v", parts)
@@ -77,7 +122,7 @@ func (e *PipelineExecutor) ParsePipeline(cmdStr string) (*types.PipelineContext,
 	return pipeline, nil
 }
 
-// ExecutePipeline 执行管道命令
+// executePipeline 执行管道命令
 func (p *PipelineExecutor) executePipeline(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx == nil || len(ctx.PipeContext.Commands) == 0 {
 		log.Error("No valid commands found in pipeline")
@@ -96,7 +141,7 @@ func (p *PipelineExecutor) executePipeline(ctx *types.ExecuteContext) (*types.Ex
 		}
 	}
 
-	// Create a new context with the same options but without output duplication
+	// Create a new context with the same options
 	execCtx := &types.ExecuteContext{
 		Context:     ctx.Context,
 		PipeContext: ctx.PipeContext,
@@ -104,12 +149,8 @@ func (p *PipelineExecutor) executePipeline(ctx *types.ExecuteContext) (*types.Ex
 		Options:     ctx.Options,
 	}
 
-	result, err := p.executor.Execute(execCtx)
-	if err != nil {
-		return result, err
-	}
-
-	return result, nil
+	// 执行命令
+	return p.executor.Execute(execCtx)
 }
 
 // Execute 实现 Executor 接口

@@ -26,15 +26,9 @@ var serverCmd = &cobra.Command{
 	Long:  `Start the HTTP server to handle command execution requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 创建执行器构建器
-		var execBuilder types.ExecutorBuilder
-		if dockerImage != "" {
-			execBuilder = executor.NewDockerExecutorBuilder(types.DockerConfig{
-				Image: dockerImage,
-			}, nil)
-		} else {
-			execBuilder = executor.NewLocalExecutorBuilder(types.LocalConfig{
-				AllowUnregisteredCommands: true,
-			}, nil)
+		execBuilder, err := createExecutorBuilder(dockerImage)
+		if err != nil {
+			return fmt.Errorf("failed to create executor builder: %w", err)
 		}
 
 		// 如果指定了审计目录，创建审计执行器
@@ -84,4 +78,23 @@ func init() {
 	serverCmd.Flags().StringVar(&serverAddr, "addr", ":8080", "Server address")
 	serverCmd.Flags().StringVar(&auditDir, "audit-dir", "", "Directory for audit logs")
 	serverCmd.Flags().StringVar(&dockerImage, "docker-image", "", "Docker image to use")
+}
+
+// createExecutorBuilder 创建执行器构建器
+func createExecutorBuilder(execType string) (types.ExecutorBuilder, error) {
+	switch execType {
+	case "docker":
+		return executor.NewDockerExecutorBuilder(types.DockerConfig{
+			Image:                     "ubuntu:latest",
+			WorkDir:                   "/workspace",
+			AllowUnregisteredCommands: true,
+		}).WithOptions(nil), nil
+	case "local":
+		return executor.NewLocalExecutorBuilder(types.LocalConfig{
+			AllowUnregisteredCommands: true,
+			UseBuiltinCommands:        true,
+		}).WithOptions(nil), nil
+	default:
+		return nil, fmt.Errorf("unsupported executor type: %s", execType)
+	}
 }

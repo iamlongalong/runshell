@@ -388,6 +388,7 @@ type DockerConfig struct {
 // LocalConfig 本地执行器配置
 type LocalConfig struct {
 	AllowUnregisteredCommands bool // 是否允许执行未注册的命令
+	UseBuiltinCommands        bool // 是否使用内置命令
 }
 
 // ExecutorBuilder 定义了执行器构建器的接口。
@@ -396,6 +397,13 @@ type ExecutorBuilder interface {
 	// Build 创建并返回一个新的执行器实例。
 	// 每次调用都应该返回一个独立的执行器实例。
 	Build() (Executor, error)
+}
+
+// BuiltinCommandProvider 定义了内置命令提供者的接口。
+// 用于提供内置命令的实现。
+type BuiltinCommandProvider interface {
+	// GetCommands 返回所有内置命令。
+	GetCommands() []ICommand
 }
 
 // ExecutorBuilderFunc 是一个便捷的函数类型，实现了 ExecutorBuilder 接口。

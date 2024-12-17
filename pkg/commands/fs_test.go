@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -43,7 +42,7 @@ func TestLSCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -64,7 +63,9 @@ func TestLSCommand(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, 0, result.ExitCode)
-				assert.NotEmpty(t, stdout.String())
+				for filename := range tt.files {
+					assert.Contains(t, stdout.String(), filename)
+				}
 			}
 		})
 	}
@@ -105,7 +106,7 @@ func TestCatCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -159,7 +160,7 @@ func TestMkdirCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -222,7 +223,7 @@ func TestRmCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -285,7 +286,7 @@ func TestCpCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}
@@ -336,7 +337,7 @@ func TestPWDCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
 				Command:  types.Command{Command: "pwd"},
@@ -405,7 +406,7 @@ func TestReadFileCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := executor.NewMockExecutor()
+			mockExec := types.NewMockExecutor()
 			for path, content := range tt.files {
 				mockExec.WriteFile(path, content)
 			}

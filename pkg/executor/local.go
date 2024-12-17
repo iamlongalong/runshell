@@ -22,15 +22,24 @@ type LocalExecutor struct {
 }
 
 // NewLocalExecutor 创建新的本地执行器
-func NewLocalExecutor(config types.LocalConfig, options *types.ExecuteOptions) *LocalExecutor {
+func NewLocalExecutor(config types.LocalConfig, options *types.ExecuteOptions, provider types.BuiltinCommandProvider) *LocalExecutor {
 	log.Debug("Creating new local executor with options: %+v", options)
 	if options == nil {
 		options = &types.ExecuteOptions{}
 	}
-	return &LocalExecutor{
+	executor := &LocalExecutor{
 		config:  config,
 		options: options,
 	}
+
+	// 如果提供了内置命令提供者，注册所有内置命令
+	if provider != nil {
+		for _, cmd := range provider.GetCommands() {
+			executor.RegisterCommand(cmd)
+		}
+	}
+
+	return executor
 }
 
 const (
@@ -48,7 +57,7 @@ func (e *LocalExecutor) SetOptions(options *types.ExecuteOptions) {
 	e.options = options
 }
 
-// executeCommand 执行单个命令
+// executeCommand 执行单命令
 func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx.Command.Command == "" {
 		log.Error("No command specified for execution")
@@ -142,7 +151,7 @@ func (e *LocalExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult
 		return nil, fmt.Errorf("context is nil")
 	}
 
-	// 合并默认选项和用户自定义选项
+	// 合并认选项和用户自定义选项
 	if ctx.Options == nil {
 		ctx.Options = &types.ExecuteOptions{}
 	}
@@ -297,26 +306,4 @@ func (e *LocalExecutor) executePipeline(ctx *types.ExecuteContext) (*types.Execu
 
 	result.ExitCode = 0
 	return result, nil
-}
-
-// LocalExecutorBuilder 构建本地执行器的构建器
-type LocalExecutorBuilder struct {
-	config  types.LocalConfig
-	options *types.ExecuteOptions
-}
-
-// NewLocalExecutorBuilder 创建新的本地执行器构建器
-func NewLocalExecutorBuilder(config types.LocalConfig, options *types.ExecuteOptions) *LocalExecutorBuilder {
-	if options == nil {
-		options = &types.ExecuteOptions{}
-	}
-	return &LocalExecutorBuilder{
-		config:  config,
-		options: options,
-	}
-}
-
-// Build 实现 ExecutorBuilder 接口
-func (b *LocalExecutorBuilder) Build() (types.Executor, error) {
-	return NewLocalExecutor(b.config, b.options), nil
 }

@@ -27,22 +27,9 @@ var execCmd = &cobra.Command{
 		}
 
 		// 创建执行器
-		var exec types.Executor
-		var err error
-		if execDockerImage != "" {
-			exec, err = executor.NewDockerExecutorBuilder(types.DockerConfig{
-				Image: execDockerImage,
-			}, nil).Build()
-			if err != nil {
-				return fmt.Errorf("failed to create Docker executor: %w", err)
-			}
-		} else {
-			exec, err = executor.NewLocalExecutorBuilder(types.LocalConfig{
-				AllowUnregisteredCommands: true,
-			}, nil).Build()
-			if err != nil {
-				return fmt.Errorf("failed to create local executor: %w", err)
-			}
+		exec, err := createExecutor(execDockerImage)
+		if err != nil {
+			return fmt.Errorf("failed to create executor: %w", err)
 		}
 
 		// 创建管道执行器
@@ -92,4 +79,27 @@ func parseEnvVars(vars []string) map[string]string {
 		}
 	}
 	return env
+}
+
+// createExecutor 创建执行器
+func createExecutor(execType string) (types.Executor, error) {
+	var builder types.ExecutorBuilder
+
+	switch execType {
+	case "docker":
+		builder = executor.NewDockerExecutorBuilder(types.DockerConfig{
+			Image:                     "ubuntu:latest",
+			WorkDir:                   "/workspace",
+			AllowUnregisteredCommands: true,
+		}).WithOptions(nil)
+	case "local":
+		builder = executor.NewLocalExecutorBuilder(types.LocalConfig{
+			AllowUnregisteredCommands: true,
+			UseBuiltinCommands:        true,
+		}).WithOptions(nil)
+	default:
+		return nil, fmt.Errorf("unsupported executor type: %s", execType)
+	}
+
+	return builder.Build()
 }

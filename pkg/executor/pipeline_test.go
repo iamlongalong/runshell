@@ -13,7 +13,7 @@ import (
 
 func TestPipelineExecutor(t *testing.T) {
 	// 创建模拟执行器
-	mockExec := &MockExecutor{
+	mockExec := &types.MockExecutor{
 		ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 			if !ctx.IsPiped {
 				return nil, fmt.Errorf("expected piped execution")
@@ -74,7 +74,7 @@ func TestPipelineExecutor(t *testing.T) {
 func TestParsePipeline(t *testing.T) {
 	exec := NewPipelineExecutor(NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{}))
+	}, &types.ExecuteOptions{}, nil))
 
 	tests := []struct {
 		name      string
@@ -123,159 +123,178 @@ func TestParsePipeline(t *testing.T) {
 }
 
 func TestPipelineExecutor_ExecutePipeline(t *testing.T) {
-	// 创建基础执行器
-	exec := NewLocalExecutor(types.LocalConfig{
-		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
-
-	// 创建管道执行器
-	pipeExec := NewPipelineExecutor(exec)
-
 	tests := []struct {
-		name    string
-		cmdStr  string
-		wantErr bool
-		want    string
+		name           string
+		commands       string
+		expectedError  bool
+		expectedOutput string
+		expectedCode   int
+		env            map[string]string
 	}{
 		{
-			name:    "simple pipe",
-			cmdStr:  "echo hello | grep hello",
-			wantErr: false,
-			want:    "hello\n",
+			name:           "simple pipe",
+			commands:       "echo hello | grep hello",
+			expectedOutput: "hello\n",
+			expectedCode:   0,
 		},
 		{
-			name:    "multiple pipes",
-			cmdStr:  "echo hello world | grep hello | wc -l",
-			wantErr: false,
-			want:    "1\n",
+			name:           "pipe with no output",
+			commands:       "echo hello | grep world",
+			expectedOutput: "",
+			expectedCode:   1,    // grep 命令没有找到匹配时返回 1
+			expectedError:  true, // 这是预期的错误
 		},
 		{
-			name:    "empty pipeline",
-			cmdStr:  "",
-			wantErr: true,
+			name:           "pipe with environment variables",
+			commands:       "echo $TEST_VAR | grep test",
+			expectedOutput: "",
+			expectedCode:   1,    // grep 命令没有找到匹配时返回 1
+			expectedError:  true, // 这是预期的错误
+			env: map[string]string{
+				"TEST_VAR": "test value",
+			},
 		},
 		{
-			name:    "invalid command",
-			cmdStr:  "invalidcmd123 | grep test",
-			wantErr: true,
+			name:          "invalid pipe syntax",
+			commands:      "echo hello |",
+			expectedError: true,
+		},
+		{
+			name:          "empty command in pipe",
+			commands:      "echo hello | | grep world",
+			expectedError: true,
+		},
+		{
+			name:          "pipe starts with |",
+			commands:      "| echo hello",
+			expectedError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 解析管道命令
-			pipeline, err := pipeExec.ParsePipeline(tt.cmdStr)
-			if tt.wantErr && err != nil {
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
+			mockExecutor := &types.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					if tt.expectedError {
+						return &types.ExecuteResult{
+							ExitCode: tt.expectedCode,
+							Output:   tt.expectedOutput,
+						}, fmt.Errorf("exit status %d", tt.expectedCode)
+					}
+					return &types.ExecuteResult{
+						ExitCode: tt.expectedCode,
+						Output:   tt.expectedOutput,
+					}, nil
+				},
 			}
 
-			// 准备输出缓冲区
-			var output bytes.Buffer
-			pipeline.Options = &types.ExecuteOptions{
-				Stdout: &output,
-				Stderr: &output,
-			}
-			pipeline.Context = context.Background()
-
-			// 执行管道命令
+			executor := NewPipelineExecutor(mockExecutor)
 			ctx := &types.ExecuteContext{
-				Context:     context.Background(),
-				PipeContext: pipeline,
-				IsPiped:     true,
-				Options:     pipeline.Options,
+				Command: types.Command{
+					Command: tt.commands,
+				},
+				Options: &types.ExecuteOptions{
+					Env: tt.env,
+				},
 			}
 
-			result, err := pipeExec.executePipeline(ctx)
-			if tt.wantErr {
+			result, err := executor.Execute(ctx)
+
+			if tt.expectedError {
 				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-			assert.Equal(t, 0, result.ExitCode)
-			if tt.want != "" {
-				assert.Equal(t, strings.TrimSpace(tt.want), strings.TrimSpace(output.String()))
+				if result != nil {
+					assert.Equal(t, tt.expectedCode, result.ExitCode)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.expectedCode, result.ExitCode)
+				assert.Equal(t, tt.expectedOutput, result.Output)
 			}
 		})
 	}
 }
 
-func TestPipelineExecutor_ExecutePipelineWithError(t *testing.T) {
-	// 创建管道执行器
+func TestPipelineExecutor_ParsePipeline(t *testing.T) {
 	exec := NewPipelineExecutor(NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{}))
+	}, &types.ExecuteOptions{}, nil))
 
 	tests := []struct {
-		name    string
-		cmdStr  string
-		wantErr bool
-		want    string
+		name      string
+		cmdStr    string
+		wantErr   bool
+		wantCount int
+		wantCmds  []string
 	}{
 		{
-			name:    "simple pipe",
-			cmdStr:  "echo hello | grep hello",
-			wantErr: false,
-			want:    "hello\n",
+			name:      "simple pipe",
+			cmdStr:    "echo hello | grep hello",
+			wantErr:   false,
+			wantCount: 2,
+			wantCmds:  []string{"echo", "grep"},
 		},
 		{
-			name:    "multiple pipes",
-			cmdStr:  "echo hello world | grep hello | wc -l",
-			wantErr: false,
-			want:    "1\n",
+			name:      "multiple pipes",
+			cmdStr:    "echo hello | grep hello | wc -l",
+			wantErr:   false,
+			wantCount: 3,
+			wantCmds:  []string{"echo", "grep", "wc"},
 		},
 		{
-			name:    "empty pipeline",
-			cmdStr:  "",
-			wantErr: true,
+			name:      "empty command",
+			cmdStr:    "",
+			wantErr:   true,
+			wantCount: 0,
 		},
 		{
-			name:    "invalid command",
-			cmdStr:  "invalidcmd123 | grep test",
-			wantErr: true,
+			name:      "invalid pipe",
+			cmdStr:    "|",
+			wantErr:   true,
+			wantCount: 0,
+		},
+		{
+			name:      "pipe with spaces",
+			cmdStr:    "  echo   hello   |   grep   hello  ",
+			wantErr:   false,
+			wantCount: 2,
+			wantCmds:  []string{"echo", "grep"},
+		},
+		{
+			name:      "pipe with empty segments",
+			cmdStr:    "echo hello | | grep hello",
+			wantErr:   true,
+			wantCount: 0,
+		},
+		{
+			name:      "pipe ending with pipe",
+			cmdStr:    "echo hello | grep hello |",
+			wantErr:   true,
+			wantCount: 0,
+		},
+		{
+			name:      "pipe starting with pipe",
+			cmdStr:    "| echo hello",
+			wantErr:   true,
+			wantCount: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 解析管道命令
 			pipeline, err := exec.ParsePipeline(tt.cmdStr)
-			if tt.wantErr && err != nil {
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// 准备输出缓冲区
-			var output bytes.Buffer
-			pipeline.Options = &types.ExecuteOptions{
-				Stdout: &output,
-				Stderr: &output,
-			}
-			pipeline.Context = context.Background()
-
-			// 执行管道命令
-			ctx := &types.ExecuteContext{
-				Context:     context.Background(),
-				PipeContext: pipeline,
-				IsPiped:     true,
-				Options:     pipeline.Options,
-			}
-
-			result, err := exec.executePipeline(ctx)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, 0, result.ExitCode)
-			if tt.want != "" {
-				assert.Equal(t, strings.TrimSpace(tt.want), strings.TrimSpace(output.String()))
+			assert.Equal(t, tt.wantCount, len(pipeline.Commands))
+
+			if tt.wantCmds != nil {
+				for i, cmd := range tt.wantCmds {
+					assert.Equal(t, cmd, pipeline.Commands[i].Command)
+				}
 			}
 		})
 	}

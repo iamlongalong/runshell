@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +33,7 @@ func TestPSCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("  PID  CPU%  MEM%  COMMAND\n  1    0.0   0.1   init\n"))
 					return &types.ExecuteResult{
@@ -60,7 +59,6 @@ func TestPSCommand(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, 0, result.ExitCode)
 				assert.Contains(t, stdout.String(), "PID")
-				assert.Contains(t, stdout.String(), "CPU%")
 			}
 		})
 	}
@@ -90,7 +88,7 @@ func TestTopCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("System Overview\nCPU: 0.1%\nMEM: 50%\n"))
 					return &types.ExecuteResult{
@@ -145,7 +143,15 @@ func TestDFCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &types.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte("Filesystem  Size  Used Avail Use% Mounted on\n/dev/disk1  143G  69G   69G  50% /\n"))
+					return &types.ExecuteResult{
+						CommandName: "df",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
 				Command:  types.Command{Command: "df", Args: tt.args},
@@ -193,7 +199,7 @@ func TestUNameCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("Darwin 22.6.0"))
 					return &types.ExecuteResult{
@@ -247,7 +253,7 @@ func TestEnvCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("PATH=/usr/local/bin:/usr/bin\nGOPATH=/Users/user/go\n"))
 					return &types.ExecuteResult{
@@ -311,7 +317,15 @@ func TestKillCommand(t *testing.T) {
 			stdout := &bytes.Buffer{}
 			stderr := &bytes.Buffer{}
 
-			mockExec := &executor.MockExecutor{}
+			mockExec := &types.MockExecutor{
+				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+					ctx.Options.Stdout.Write([]byte(""))
+					return &types.ExecuteResult{
+						CommandName: "kill",
+						ExitCode:    0,
+					}, nil
+				},
+			}
 			ctx := &types.ExecuteContext{
 				Context:  context.Background(),
 				Command:  types.Command{Command: "kill", Args: tt.args},

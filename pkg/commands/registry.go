@@ -6,7 +6,7 @@ import (
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
-// RegisterCommands 注册所有内置命令
+// GetBuiltinCommands 注册所有内置命令
 func GetBuiltinCommands() []types.ICommand {
 	// 创建命令处理器
 	cmds := []types.ICommand{

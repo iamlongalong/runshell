@@ -40,7 +40,7 @@ func (c *testCommand) Info() types.CommandInfo {
 func TestLocalExecutor(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
@@ -63,7 +63,7 @@ func TestLocalExecutor(t *testing.T) {
 func TestLocalExecutorWithWorkDir(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	// 创建临时目录
 	tempDir := t.TempDir()
@@ -89,7 +89,7 @@ func TestLocalExecutorWithWorkDir(t *testing.T) {
 func TestLocalExecutorWithEnv(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	var output bytes.Buffer
 	ctx := &types.ExecuteContext{
@@ -164,7 +164,7 @@ func TestLocalExecutorWithPipe(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			exec := NewLocalExecutor(types.LocalConfig{
 				AllowUnregisteredCommands: true,
-			}, nil)
+			}, nil, nil)
 
 			var output bytes.Buffer
 			pipeline := &types.PipelineContext{
@@ -203,7 +203,7 @@ func TestLocalExecutorWithPipe(t *testing.T) {
 func TestLocalExecutor_Execute(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	cmd := &testCommand{
 		name:        "test_command",
@@ -236,7 +236,7 @@ func TestLocalExecutor_Execute(t *testing.T) {
 func TestLocalExecutor_RegisterCommand(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	cmd := &testCommand{
 		name:        "test_command",
@@ -260,7 +260,7 @@ func TestLocalExecutor_RegisterCommand(t *testing.T) {
 func TestLocalExecutor_UnregisterCommand(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	cmd := &testCommand{
 		name:        "test_command",
@@ -282,7 +282,7 @@ func TestLocalExecutor_UnregisterCommand(t *testing.T) {
 func TestLocalExecutor_ListCommands(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	cmd := &testCommand{
 		name:        "test_command",
@@ -381,7 +381,7 @@ func TestLocalExecutorPipeline(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			exec := NewLocalExecutor(types.LocalConfig{
 				AllowUnregisteredCommands: !tt.wantErr,
-			}, nil)
+			}, nil, nil)
 
 			cmd := &testCommand{
 				name:        "test_command",
@@ -457,7 +457,7 @@ func TestLocalExecutorPipelineEdgeCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			exec := NewLocalExecutor(types.LocalConfig{
 				AllowUnregisteredCommands: true,
-			}, nil)
+			}, nil, nil)
 
 			ctx := &types.ExecuteContext{
 				Context:     context.Background(),
@@ -486,7 +486,7 @@ func TestLocalExecutorPipelineEdgeCases(t *testing.T) {
 func TestLocalExecutorPipelineCancel(t *testing.T) {
 	exec := NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, nil)
+	}, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	pipeline := &types.PipelineContext{

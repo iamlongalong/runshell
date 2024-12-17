@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
@@ -27,7 +26,7 @@ func TestGitCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("git version 2.30.1"))
 					return &types.ExecuteResult{
@@ -55,6 +54,7 @@ func TestGitCommand(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, 0, result.ExitCode)
+			assert.Contains(t, buf.String(), "git version")
 		})
 	}
 }
@@ -75,7 +75,7 @@ func TestGoCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					ctx.Options.Stdout.Write([]byte("go version go1.21.0 darwin/amd64"))
 					return &types.ExecuteResult{
@@ -165,7 +165,7 @@ func TestPythonCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建模拟执行器
-			mockExec := &executor.MockExecutor{
+			mockExec := &types.MockExecutor{
 				ExecuteFunc: func(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 					output := "Python 3.9.0"
 					ctx.Options.Stdout.Write([]byte(output))

@@ -72,7 +72,7 @@ func main() {
 	// 创建本地执行器
 	localExec := executor.NewLocalExecutor(types.LocalConfig{
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 
 	ctx := context.Background()
 

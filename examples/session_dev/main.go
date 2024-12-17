@@ -201,7 +201,7 @@ func main() {
 		AllowUnregisteredCommands: true,
 		WorkDir:                   executor.DefaultWorkDir,
 		BindMount:                 fmt.Sprintf("%s:%s", projectDir, executor.DefaultWorkDir),
-	}, &types.ExecuteOptions{
+	}).WithOptions(&types.ExecuteOptions{
 		WorkDir: executor.DefaultWorkDir,
 	}), ":8081")
 
