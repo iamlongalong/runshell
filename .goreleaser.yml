@@ -49,4 +49,21 @@ changelog:
       - '^docs:'
       - '^test:'
       - '^ci:'
-      - '^chore:' 
+      - '^chore:'
+
+release:
+  mode: replace
+  draft: false
+  prerelease: auto
+  header: |
+    ## RunShell {{.Tag}} ({{ .Date }})
+    
+    This release includes various improvements and bug fixes.
+  footer: |
+    ## Thanks!
+    
+    For more information, please visit [runshell](https://github.com/iamlongalong/runshell)
+  
+  extra_files:
+    - glob: ./README.md
+    - glob: ./LICENSE*
