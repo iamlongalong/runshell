@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/iamlongalong/runshell/cmd/runshell/docs"
+	"github.com/iamlongalong/runshell/pkg/log"
 	"github.com/iamlongalong/runshell/pkg/types"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -99,25 +100,25 @@ func NewServer(executorBuilder types.ExecutorBuilder, addr string) *Server {
 		start := time.Now()
 
 		// 打印请求信息
-		fmt.Printf("\n=== [REQUEST-%s] %v ===\n", requestID, start.Format("2006-01-02 15:04:05.000"))
-		fmt.Printf("Path: %s\n", c.Request.URL.Path)
-		fmt.Printf("Method: %s\n", c.Request.Method)
-		fmt.Printf("Client IP: %s\n", c.ClientIP())
-		fmt.Printf("Headers:\n")
+		log.Debug("\n=== [REQUEST-%s] %v ===", requestID, start.Format("2006-01-02 15:04:05.000"))
+		log.Debug("Path: %s", c.Request.URL.Path)
+		log.Debug("Method: %s", c.Request.Method)
+		log.Debug("Client IP: %s", c.ClientIP())
+		log.Debug("Headers:")
 		for k, v := range c.Request.Header {
-			fmt.Printf("  %s: %v\n", k, v)
+			log.Debug("  %s: %v", k, v)
 		}
-		fmt.Printf("Query Parameters:\n")
+		log.Debug("Query Parameters:")
 		for k, v := range c.Request.URL.Query() {
-			fmt.Printf("  %s: %v\n", k, v)
+			log.Debug("  %s: %v", k, v)
 		}
 
 		// 如果是 JSON 请求，打印请求体
 		if c.Request.Body != nil && c.Request.Header.Get("Content-Type") == "application/json" {
 			bodyBytes, _ := io.ReadAll(c.Request.Body)
-			// 重新设置 body 以供后���中间件使用
+			// 重新设置 body 以供后续中间件使用
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			fmt.Printf("Request Body (JSON):\n%s\n", string(bodyBytes))
+			log.Debug("Request Body (JSON):\n%s", string(bodyBytes))
 		}
 
 		// 创建自定义的 ResponseWriter 来捕获响应
@@ -134,33 +135,33 @@ func NewServer(executorBuilder types.ExecutorBuilder, addr string) *Server {
 		duration := time.Since(start)
 
 		// 打印响应信息
-		fmt.Printf("\n=== [RESPONSE-%s] %v ===\n", requestID, time.Now().Format("2006-01-02 15:04:05.000"))
-		fmt.Printf("Duration: %v\n", duration)
-		fmt.Printf("Status: %d\n", c.Writer.Status())
-		fmt.Printf("Response Headers:\n")
+		log.Debug("\n=== [RESPONSE-%s] %v ===", requestID, time.Now().Format("2006-01-02 15:04:05.000"))
+		log.Debug("Duration: %v", duration)
+		log.Debug("Status: %d", c.Writer.Status())
+		log.Debug("Response Headers:")
 		for k, v := range c.Writer.Header() {
-			fmt.Printf("  %s: %v\n", k, v)
+			log.Debug("  %s: %v", k, v)
 		}
 
 		// 打印响应体
 		if blw.body.Len() > 0 {
 			contentType := c.Writer.Header().Get("Content-Type")
-			fmt.Printf("Response Body (%s):\n%s\n", contentType, blw.body.String())
+			log.Debug("Response Body (%s):\n%s", contentType, blw.body.String())
 		}
 
 		// 如果有错误，打印错误信息
 		if len(c.Errors) > 0 {
-			fmt.Printf("\nErrors:\n")
+			log.Debug("\nErrors:")
 			for i, err := range c.Errors {
-				fmt.Printf("  %d. [%v] %v\n", i+1, err.Type, err.Err)
+				log.Debug("  %d. [%v] %v", i+1, err.Type, err.Err)
 				if err.Meta != nil {
-					fmt.Printf("     Meta: %+v\n", err.Meta)
+					log.Debug("     Meta: %+v", err.Meta)
 				}
 			}
 		}
 
-		fmt.Printf("\n=== [END-%s] === Total Time: %v ===\n", requestID, duration)
-		fmt.Println(strings.Repeat("=", 80))
+		log.Debug("\n=== [END-%s] === Total Time: %v ===", requestID, duration)
+		log.Debug(strings.Repeat("=", 80))
 	})
 
 	s := &Server{
@@ -195,8 +196,8 @@ func (w *bodyLogWriter) WriteHeader(status int) {
 func (s *Server) setupRoutes() {
 	// API 文档
 	s.engine.GET("/swagger/*any", func(c *gin.Context) {
-		fmt.Printf("Swagger request received: %s\n", c.Request.URL.Path)
-		fmt.Printf("Swagger request headers: %v\n", c.Request.Header)
+		log.Debug("Swagger request received: %s", c.Request.URL.Path)
+		log.Debug("Swagger request headers: %v", c.Request.Header)
 
 		if c.Param("any") == "/doc.json" {
 			doc := docs.SwaggerInfo.ReadDoc()
@@ -246,12 +247,12 @@ func (s *Server) Start() error {
 	}
 
 	// 创建监听器
-	fmt.Printf("Creating listener for %s\n", s.addr)
+	log.Info("Creating listener for %s", s.addr)
 	listener, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return fmt.Errorf("failed to create listener: %w", err)
 	}
-	fmt.Printf("Listener created successfully for %s\n", s.addr)
+	log.Info("Listener created successfully for %s", s.addr)
 
 	s.listener = listener
 	s.server = &http.Server{
@@ -259,10 +260,10 @@ func (s *Server) Start() error {
 	}
 
 	// 启动服务器
-	fmt.Printf("Starting server on %s\n", s.addr)
+	log.Info("Starting server on %s", s.addr)
 	go func() {
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("Server error: %v\n", err)
+			log.Error("Server error: %v", err)
 		}
 	}()
 
@@ -321,7 +322,7 @@ func (s *Server) handleExec(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("Received exec request: %+v\n", req)
+	log.Debug("Received exec request: %+v", req)
 
 	executor, err := s.executorBuilder.Build(&types.ExecuteOptions{
 		WorkDir: req.WorkDir,
@@ -332,7 +333,7 @@ func (s *Server) handleExec(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("Created executor: %s\n", executor.Name())
+	log.Debug("Created executor: %s", executor.Name())
 
 	// 准备执行选项
 	var outputBuf bytes.Buffer
@@ -343,7 +344,7 @@ func (s *Server) handleExec(c *gin.Context) {
 		Stderr:  &outputBuf,
 	}
 
-	fmt.Printf("Prepared execution options: %+v\n", opts)
+	log.Debug("Prepared execution options: %+v", opts)
 
 	// 执行命令
 	execCtx := &types.ExecuteContext{
@@ -356,16 +357,16 @@ func (s *Server) handleExec(c *gin.Context) {
 		Executor: executor,
 	}
 
-	fmt.Printf("Executing command: %s %v\n", req.Command, req.Args)
+	log.Debug("Executing command: %s %v", req.Command, req.Args)
 
 	result, err := executor.Execute(execCtx)
 	if err != nil {
-		fmt.Printf("Command execution failed: %v\n", err)
+		log.Error("Command execution failed: %v", err)
 		s.handleError(c, http.StatusInternalServerError, err, fmt.Sprintf("Command execution failed: %v", err))
 		return
 	}
 
-	fmt.Printf("Command execution succeeded: %+v\n", result)
+	log.Info("Command execution succeeded: %+v", result)
 
 	// 构造响应
 	response := ExecResponse{
@@ -581,18 +582,18 @@ func (s *Server) handleError(c *gin.Context, status int, err error, msg string) 
 	_ = c.Error(err)
 
 	if status == http.StatusInternalServerError {
-		fmt.Printf("Internal Server Error Details:\n")
-		fmt.Printf("Error: %v\n", err)
-		fmt.Printf("Path: %s\n", c.Request.URL.Path)
-		fmt.Printf("Method: %s\n", c.Request.Method)
-		fmt.Printf("Message: %s\n", msg)
-		fmt.Printf("Headers: %v\n", c.Request.Header)
-		fmt.Printf("Query: %v\n", c.Request.URL.Query())
+		log.Error("Internal Server Error Details:")
+		log.Error("Error: %v", err)
+		log.Error("Path: %s", c.Request.URL.Path)
+		log.Error("Method: %s", c.Request.Method)
+		log.Error("Message: %s", msg)
+		log.Error("Headers: %v", c.Request.Header)
+		log.Error("Query: %v", c.Request.URL.Query())
 		if c.Request.Body != nil {
 			body, _ := c.GetRawData()
-			fmt.Printf("Body: %s\n", string(body))
+			log.Error("Body: %s", string(body))
 		}
-		fmt.Println("----------------------------------------")
+		log.Error("----------------------------------------")
 	}
 
 	if msg == "" {
