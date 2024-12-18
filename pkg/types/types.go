@@ -8,87 +8,146 @@ import (
 
 // ExecuteOptions 定义命令执行的选项。
 // 包含工作目录、环境变量、超时设置、输入输出流等配置。
+// swagger:model
 type ExecuteOptions struct {
 	// WorkDir 指定命令执行的工作目录，所有相对路径都相对于此目录
-	WorkDir string
+	WorkDir string `json:"workdir,omitempty"`
 
 	// Env 指定命令执行时的环境变量
-	Env map[string]string
+	Env map[string]string `json:"env,omitempty"`
 
-	// Timeout 指定命令执行的超时时间
-	Timeout time.Duration
+	// Timeout 指定命令执行的超时时间（纳秒）
+	// swagger:strfmt int64
+	Timeout int64 `json:"timeout,omitempty" example:"30000000000"` // 30 seconds in nanoseconds
 
 	// Stdin 指定命令的标准输入流
-	Stdin io.Reader
+	Stdin io.Reader `json:"-"`
 
 	// Stdout 指定命令的标准输出流
-	Stdout io.Writer
+	Stdout io.Writer `json:"-"`
 
 	// Stderr 指定命令的标准错误流
-	Stderr io.Writer
+	Stderr io.Writer `json:"-"`
 
 	// User 指定执行命令的用户信息
-	User *User
+	User *User `json:"user,omitempty"`
 
 	// Metadata 存储额外的元数据信息
-	Metadata map[string]string
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// Merge 合并两个执行选项, 用于处理默认选项和用户自定义选项
+// Merge 合并两个执行选项, 用于处理默认选项和用��自定义选项
 func (opts *ExecuteOptions) Merge(other *ExecuteOptions) *ExecuteOptions {
 	if other == nil {
+		if opts == nil {
+			return &ExecuteOptions{
+				Env:      make(map[string]string),
+				Metadata: make(map[string]string),
+			}
+		}
 		return opts
 	}
 
+	// 如果当前选项为空，创建一个新的选项
 	if opts == nil {
-		opts = &ExecuteOptions{}
+		result := &ExecuteOptions{
+			WorkDir:  other.WorkDir,
+			Timeout:  other.Timeout,
+			Stdin:    other.Stdin,
+			Stdout:   other.Stdout,
+			Stderr:   other.Stderr,
+			User:     other.User,
+			Env:      make(map[string]string),
+			Metadata: make(map[string]string),
+		}
+
+		// 复制环境变量
+		if other.Env != nil {
+			for k, v := range other.Env {
+				result.Env[k] = v
+			}
+		}
+
+		// 复制元数据
+		if other.Metadata != nil {
+			for k, v := range other.Metadata {
+				result.Metadata[k] = v
+			}
+		}
+
+		return result
 	}
 
-	if opts.Env == nil {
-		opts.Env = make(map[string]string)
+	// 创建新的选项实例
+	result := &ExecuteOptions{
+		WorkDir:  opts.WorkDir,
+		Timeout:  opts.Timeout,
+		Stdin:    opts.Stdin,
+		Stdout:   opts.Stdout,
+		Stderr:   opts.Stderr,
+		User:     opts.User,
+		Env:      make(map[string]string),
+		Metadata: make(map[string]string),
 	}
 
-	if opts.Metadata == nil {
-		opts.Metadata = make(map[string]string)
-	}
-
-	if opts.WorkDir == "" {
-		opts.WorkDir = other.WorkDir
-	}
-
-	for k, v := range other.Env {
-		if _, ok := opts.Env[k]; !ok {
-			opts.Env[k] = v
+	// 复制当前选项的环境变量
+	if opts.Env != nil {
+		for k, v := range opts.Env {
+			result.Env[k] = v
 		}
 	}
 
-	if opts.Timeout == 0 {
-		opts.Timeout = other.Timeout
-	}
-
-	if opts.Stdin == nil {
-		opts.Stdin = other.Stdin
-	}
-
-	if opts.Stdout == nil {
-		opts.Stdout = other.Stdout
-	}
-
-	if opts.Stderr == nil {
-		opts.Stderr = other.Stderr
-	}
-
-	if opts.User == nil {
-		opts.User = other.User
-	}
-
-	for k, v := range other.Metadata {
-		if _, ok := opts.Metadata[k]; !ok {
-			opts.Metadata[k] = v
+	// 复制当前选项的元数据
+	if opts.Metadata != nil {
+		for k, v := range opts.Metadata {
+			result.Metadata[k] = v
 		}
 	}
 
-	return opts
+	// 合并其他选项的值
+	if other.WorkDir != "" {
+		result.WorkDir = other.WorkDir
+	}
+
+	// 合并环境变量
+	if other.Env != nil {
+		for k, v := range other.Env {
+			if _, ok := result.Env[k]; !ok {
+				result.Env[k] = v
+			}
+		}
+	}
+
+	if other.Timeout != 0 {
+		result.Timeout = other.Timeout
+	}
+
+	if other.Stdin != nil {
+		result.Stdin = other.Stdin
+	}
+
+	if other.Stdout != nil {
+		result.Stdout = other.Stdout
+	}
+
+	if other.Stderr != nil {
+		result.Stderr = other.Stderr
+	}
+
+	if other.User != nil {
+		result.User = other.User
+	}
+
+	// 合并元数据
+	if other.Metadata != nil {
+		for k, v := range other.Metadata {
+			if _, ok := result.Metadata[k]; !ok {
+				result.Metadata[k] = v
+			}
+		}
+	}
+
+	return result
 }
 
 // ExecuteContext 包含命令执行的上下文信息。
@@ -133,6 +192,7 @@ func (ctx *ExecuteContext) Copy() *ExecuteContext {
 
 // ExecuteResult 表示命令执行的结果。
 // 包含执行状态、输出、错误信息等。
+// swagger:model
 type ExecuteResult struct {
 	// CommandName 是执行的命令名称
 	CommandName string
@@ -157,21 +217,24 @@ type ExecuteResult struct {
 }
 
 // ResourceUsage 记录命令执行过程中的资源使用情况。
+// swagger:model
 type ResourceUsage struct {
-	// CPUTime 是 CPU 使用时间
-	CPUTime time.Duration
+	// CPUTime 是 CPU 使用时间（纳秒）
+	// swagger:strfmt int64
+	CPUTime int64 `json:"cpu_time" example:"1000000000"` // 1 second in nanoseconds
 
 	// MemoryUsage 是内存使用量（字节）
-	MemoryUsage int64
+	MemoryUsage int64 `json:"memory_usage" example:"1048576"` // 1MB in bytes
 
 	// IORead 是 IO 读取量（字节）
-	IORead int64
+	IORead int64 `json:"io_read" example:"4096"` // 4KB in bytes
 
 	// IOWrite 是 IO 写入量（字节）
-	IOWrite int64
+	IOWrite int64 `json:"io_write" example:"4096"` // 4KB in bytes
 }
 
 // User 表示执行命令的用户信息。
+// swagger:model
 type User struct {
 	// Username 是用户名
 	Username string
@@ -190,12 +253,13 @@ type User struct {
 type CommandHandler = ICommand
 
 // CommandInfo 表示一个可执行的命令
+// swagger:model
 type CommandInfo struct {
-	Name        string            // 命令名称
-	Description string            // 命令描述
-	Usage       string            // 命令用法
-	Category    string            // 命令分类
-	Metadata    map[string]string // 命令元数据
+	Name        string            `json:"name" example:"ls"`                    // 命令名称
+	Description string            `json:"description" example:"List directory"` // 命令描述
+	Usage       string            `json:"usage" example:"ls [options] [path]"`  // 命令用法
+	Category    string            `json:"category,omitempty"`                   // 命令类
+	Metadata    map[string]string `json:"metadata,omitempty"`                   // 命令元数据
 }
 
 // ICommand 定义了命令处理器的接口
@@ -210,7 +274,7 @@ type CommandFilter struct {
 	// Category 按分类过滤
 	Category string
 
-	// Pattern 按模式匹配过滤
+	// Pattern 按模式匹配滤
 	Pattern string
 }
 
@@ -277,34 +341,20 @@ type PipelineContext struct {
 	Options  *ExecuteOptions // 执行选项
 }
 
-// Session 表示一个执行会
+// Session 表示一个执行会话
+// swagger:model
 type Session struct {
-	// ID 是会话的唯一标识符
-	ID string `json:"id"`
+	ID             string            `json:"id" example:"sess_123"` // 会话的唯一标识符
+	Options        *ExecuteOptions   `json:"options,omitempty"`     // 会话的执行选项
+	CreatedAt      time.Time         `json:"created_at"`            // 会话创建时间
+	LastAccessedAt time.Time         `json:"last_accessed_at"`      // 最后访问时间
+	Metadata       map[string]string `json:"metadata,omitempty"`    // 会话相关的元数据
+	Status         string            `json:"status"`                // 会话状态
 
-	// Executor 是会话使用的执行器
-	Executor Executor `json:"-"`
-
-	// Options 是会话的执行选项
-	Options *ExecuteOptions `json:"options,omitempty"`
-
-	// Context 是会话的上下文
-	Context context.Context `json:"-"`
-
-	// Cancel 是用于取消会话的函数
-	Cancel context.CancelFunc `json:"-"`
-
-	// CreatedAt 是会话创建时间
-	CreatedAt time.Time `json:"created_at"`
-
-	// LastAccessedAt 是最后访问时间
-	LastAccessedAt time.Time `json:"last_accessed_at"`
-
-	// Metadata 存储会话相关的元数据
-	Metadata map[string]string `json:"metadata,omitempty"`
-
-	// Status 是会话状态
-	Status string `json:"status"`
+	// 以下字��不会在 JSON 中序列化
+	Executor Executor           `json:"-"` // 会话使用的执行器
+	Context  context.Context    `json:"-"` // 会话的上下文
+	Cancel   context.CancelFunc `json:"-"` // 用于取消会话的函数
 }
 
 // SessionManager 定义了会话管理器的接口
@@ -332,31 +382,21 @@ const (
 	ExecutorTypeDocker = "docker"
 )
 
-// SessionRequest 表示创会话的请求
+// SessionRequest 表示创建会话的请求
+// swagger:model
 type SessionRequest struct {
-	// ExecutorType 是执行器类型（local/docker）
-	ExecutorType string `json:"executor_type"`
-
-	// DockerConfig 是 Docker 执行器配置
-	DockerConfig *DockerConfig `json:"docker_config,omitempty"`
-
-	// LocalConfig 是本地执行器配置
-	LocalConfig *LocalConfig `json:"local_config,omitempty"`
-
-	// Options 是执行选项
-	Options *ExecuteOptions `json:"options,omitempty"`
-
-	// Metadata 是会话元数据
-	Metadata map[string]string `json:"metadata,omitempty"`
+	ExecutorType string            `json:"executor_type,omitempty"` // 执行器类型（local/docker）
+	DockerConfig *DockerConfig     `json:"docker_config,omitempty"` // Docker 执行器配置
+	LocalConfig  *LocalConfig      `json:"local_config,omitempty"`  // 本地执行器配置
+	Options      *ExecuteOptions   `json:"options,omitempty"`       // 执行选项
+	Metadata     map[string]string `json:"metadata,omitempty"`      // 会话元数据
 }
 
 // SessionResponse 表示会话操作的响应
+// swagger:model
 type SessionResponse struct {
-	// Session 是会话信息
-	Session *Session `json:"session"`
-
-	// Error 是错误信息
-	Error string `json:"error,omitempty"`
+	Session *Session `json:"session"`         // 会话信息
+	Error   string   `json:"error,omitempty"` // 错误信息
 }
 
 // CommandExecution 表示命令执行记录
@@ -388,7 +428,7 @@ type DockerConfig struct {
 // LocalConfig 本地执行器配置
 type LocalConfig struct {
 	AllowUnregisteredCommands bool // 是否允许执行未注册的命令
-	UseBuiltinCommands        bool // 是否使用内置命令
+	UseBuiltinCommands        bool // 是否使用内置命���
 }
 
 // ExecutorBuilder 定义了执行器构建器的接口。
@@ -402,7 +442,7 @@ type ExecutorBuilder interface {
 // BuiltinCommandProvider 定义了内置命令提供者的接口。
 // 用于提供内置命令的实现。
 type BuiltinCommandProvider interface {
-	// GetCommands 返回所有内置命令。
+	// GetCommands 回所有内置命令。
 	GetCommands() []ICommand
 }
 

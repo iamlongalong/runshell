@@ -59,7 +59,7 @@ func (e *LocalExecutor) SetOptions(options *types.ExecuteOptions) {
 
 // executeCommand 执行单命令
 func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if ctx.Command.Command == "" {
+	if ctx == nil || ctx.Command.Command == "" {
 		log.Error("No command specified for execution")
 		return nil, fmt.Errorf("no command specified")
 	}
@@ -86,16 +86,17 @@ func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.Execut
 	}
 	log.Debug("Found command path: %s", cmdPath)
 
+	// 创建命令
 	cmd := exec.CommandContext(ctx.Context, cmdPath, ctx.Command.Args...)
 
 	// 设置工作目录
-	if ctx.Options.WorkDir != "" {
+	if ctx.Options != nil && ctx.Options.WorkDir != "" {
 		log.Debug("Setting working directory: %s", ctx.Options.WorkDir)
 		cmd.Dir = ctx.Options.WorkDir
 	}
 
 	// 设置环境变量
-	if len(ctx.Options.Env) > 0 {
+	if ctx.Options != nil && len(ctx.Options.Env) > 0 {
 		log.Debug("Setting environment variables: %v", ctx.Options.Env)
 		cmd.Env = os.Environ()
 		for k, v := range ctx.Options.Env {
@@ -103,8 +104,8 @@ func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.Execut
 		}
 	}
 
-	var stdoutBuf bytes.Buffer
 	// 设置输入输出
+	var stdoutBuf, stderrBuf bytes.Buffer
 	if ctx.Options != nil {
 		if ctx.Options.Stdin != nil {
 			cmd.Stdin = ctx.Options.Stdin
@@ -115,8 +116,13 @@ func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.Execut
 			cmd.Stdout = &stdoutBuf
 		}
 		if ctx.Options.Stderr != nil {
-			cmd.Stderr = ctx.Options.Stderr
+			cmd.Stderr = io.MultiWriter(&stderrBuf, ctx.Options.Stderr)
+		} else {
+			cmd.Stderr = &stderrBuf
 		}
+	} else {
+		cmd.Stdout = &stdoutBuf
+		cmd.Stderr = &stderrBuf
 	}
 
 	// 执行命令
@@ -129,12 +135,22 @@ func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.Execut
 		CommandName: ctx.Command.Command,
 		StartTime:   startTime,
 		EndTime:     endTime,
-		Output:      stdoutBuf.String(),
+	}
+
+	// 合并输出
+	result.Output = stdoutBuf.String()
+	if stderrBuf.Len() > 0 {
+		if result.Output != "" {
+			result.Output += "\n"
+		}
+		result.Output += stderrBuf.String()
 	}
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			result.ExitCode = exitErr.ExitCode()
+		} else {
+			result.ExitCode = 1
 		}
 		result.Error = err
 		log.Error("Command execution failed: %v", err)
@@ -151,29 +167,195 @@ func (e *LocalExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult
 		return nil, fmt.Errorf("context is nil")
 	}
 
-	// 合并认选项和用户自定义选项
-	if ctx.Options == nil {
-		ctx.Options = &types.ExecuteOptions{}
-	}
-	ctx.Options = ctx.Options.Merge(e.options)
-
-	// 如果是管道命令，使用管道执行器
-	if ctx.IsPiped {
-		return e.executePipeline(ctx)
+	// 检查命令是否为空
+	if ctx.Command.Command == "" {
+		return nil, fmt.Errorf("no command specified")
 	}
 
-	return e.executeCommand(ctx)
+	log.Debug("Executing command: %s %v", ctx.Command.Command, ctx.Command.Args)
+
+	// 检查是否是内置命令
+	if cmd, ok := e.commands.Load(ctx.Command.Command); ok {
+		log.Debug("Found built-in command: %s", ctx.Command.Command)
+		command := cmd.(types.ICommand)
+		return command.Execute(ctx)
+	}
+
+	if !e.config.AllowUnregisteredCommands {
+		log.Error("Unregistered command not allowed: %s", ctx.Command.Command)
+		return nil, fmt.Errorf("unregistered command not allowed: %s", ctx.Command.Command)
+	}
+
+	// 准备命令
+	cmdPath, err := exec.LookPath(ctx.Command.Command)
+	if err != nil {
+		log.Error("Command not found: %s", ctx.Command.Command)
+		return nil, fmt.Errorf("command not found: %s", ctx.Command.Command)
+	}
+	log.Debug("Found command path: %s", cmdPath)
+
+	// 创建命令
+	cmd := exec.CommandContext(ctx.Context, cmdPath, ctx.Command.Args...)
+
+	// 合并选项，避免递归
+	finalOptions := &types.ExecuteOptions{
+		Env:      make(map[string]string),
+		Metadata: make(map[string]string),
+	}
+
+	// 首先应用执行器的默认选项
+	if e.options != nil {
+		if e.options.WorkDir != "" {
+			finalOptions.WorkDir = e.options.WorkDir
+		}
+		if e.options.Env != nil {
+			for k, v := range e.options.Env {
+				finalOptions.Env[k] = v
+			}
+		}
+		finalOptions.Timeout = e.options.Timeout
+		finalOptions.Stdin = e.options.Stdin
+		finalOptions.Stdout = e.options.Stdout
+		finalOptions.Stderr = e.options.Stderr
+		finalOptions.User = e.options.User
+	}
+
+	// 然后应用上下文中的选项，覆盖默认选项
+	if ctx.Options != nil {
+		if ctx.Options.WorkDir != "" {
+			finalOptions.WorkDir = ctx.Options.WorkDir
+		}
+		if ctx.Options.Env != nil {
+			for k, v := range ctx.Options.Env {
+				finalOptions.Env[k] = v
+			}
+		}
+		if ctx.Options.Timeout != 0 {
+			finalOptions.Timeout = ctx.Options.Timeout
+		}
+		if ctx.Options.Stdin != nil {
+			finalOptions.Stdin = ctx.Options.Stdin
+		}
+		if ctx.Options.Stdout != nil {
+			finalOptions.Stdout = ctx.Options.Stdout
+		}
+		if ctx.Options.Stderr != nil {
+			finalOptions.Stderr = ctx.Options.Stderr
+		}
+		if ctx.Options.User != nil {
+			finalOptions.User = ctx.Options.User
+		}
+	}
+
+	// 设置工作目录
+	if finalOptions.WorkDir != "" {
+		log.Debug("Setting working directory: %s", finalOptions.WorkDir)
+		cmd.Dir = finalOptions.WorkDir
+	}
+
+	// 设置环境变量
+	if len(finalOptions.Env) > 0 {
+		log.Debug("Setting environment variables: %v", finalOptions.Env)
+		cmd.Env = os.Environ()
+		for k, v := range finalOptions.Env {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		}
+	}
+
+	// 设置输入输出
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if finalOptions.Stdin != nil {
+		cmd.Stdin = finalOptions.Stdin
+	}
+	if finalOptions.Stdout != nil {
+		cmd.Stdout = io.MultiWriter(&stdoutBuf, finalOptions.Stdout)
+	} else {
+		cmd.Stdout = &stdoutBuf
+	}
+	if finalOptions.Stderr != nil {
+		cmd.Stderr = io.MultiWriter(&stderrBuf, finalOptions.Stderr)
+	} else {
+		cmd.Stderr = &stderrBuf
+	}
+
+	// 执行命令
+	startTime := types.GetTimeNow()
+	err = cmd.Run()
+	endTime := types.GetTimeNow()
+
+	// 准备结果
+	result := &types.ExecuteResult{
+		CommandName: ctx.Command.Command,
+		StartTime:   startTime,
+		EndTime:     endTime,
+	}
+
+	// 合并输出
+	result.Output = stdoutBuf.String()
+	if stderrBuf.Len() > 0 {
+		if result.Output != "" {
+			result.Output += "\n"
+		}
+		result.Output += stderrBuf.String()
+	}
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			result.ExitCode = 1
+		}
+		result.Error = err
+		log.Error("Command execution failed: %v", err)
+		return result, err
+	}
+
+	result.ExitCode = 0
+	return result, nil
 }
 
 // ListCommands 列出所有可用命令
 func (e *LocalExecutor) ListCommands() []types.CommandInfo {
 	var commands []types.CommandInfo
+
+	// 首先添加已注册的命令
 	e.commands.Range(func(key, value interface{}) bool {
 		if cmd, ok := value.(types.ICommand); ok {
 			commands = append(commands, cmd.Info())
 		}
 		return true
 	})
+
+	// 如果没有注册的命令且允许未注册的命令，返回一些常用命令
+	if len(commands) == 0 && e.config.AllowUnregisteredCommands {
+		return []types.CommandInfo{
+			{
+				Name:        "ls",
+				Description: "List directory contents",
+				Usage:       "ls [OPTION]... [FILE]...",
+				Category:    "file",
+			},
+			{
+				Name:        "pwd",
+				Description: "Print working directory",
+				Usage:       "pwd",
+				Category:    "file",
+			},
+			{
+				Name:        "cd",
+				Description: "Change directory",
+				Usage:       "cd [dir]",
+				Category:    "file",
+			},
+			{
+				Name:        "echo",
+				Description: "Display a line of text",
+				Usage:       "echo [STRING]...",
+				Category:    "shell",
+			},
+		}
+	}
+
 	return commands
 }
 

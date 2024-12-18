@@ -89,7 +89,7 @@ run: build-local
 .PHONY: coverage
 coverage: test
 	@echo "Generating coverage report..."
-	@go tool cover -html=coverage.out
+	@go tool cover -html=log/coverage.out
 
 # 代码格式化
 .PHONY: fmt
@@ -140,3 +140,19 @@ examples:
 # 运行所有测试和示例
 test-all: test examples
 	@echo "All tests and examples completed successfully!"
+
+.PHONY: swagger
+swagger: ## Generate Swagger documentation
+	@echo "Generating Swagger documentation..."
+	@which swag >/dev/null || (echo "Installing swag..." && go install github.com/swaggo/swag/cmd/swag@latest)
+	@swag init -g pkg/server/server.go -o cmd/runshell/docs --parseDependency
+
+.PHONY: swagger-serve
+swagger-serve: swagger ## Start the server with Swagger documentation
+	@echo "Starting server with Swagger documentation..."
+	@go run ./cmd/runshell/main.go server --addr :7070 --executor-type local
+
+.PHONY: swagger-validate
+swagger-validate: swagger ## Validate Swagger documentation
+	@echo "Validating Swagger documentation..."
+	@./script/api_test.sh

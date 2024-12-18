@@ -1,0 +1,430 @@
+basePath: /api/v1
+definitions:
+  github_com_iamlongalong_runshell_pkg_types.CommandInfo:
+    properties:
+      category:
+        description: 命令类
+        type: string
+      description:
+        description: 命令描述
+        example: List directory
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        description: 命令元数据
+        type: object
+      name:
+        description: 命令名称
+        example: ls
+        type: string
+      usage:
+        description: 命令用法
+        example: ls [options] [path]
+        type: string
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.DockerConfig:
+    properties:
+      allowUnregisteredCommands:
+        description: 是否允许执行未注册的命令
+        type: boolean
+      bindMount:
+        description: 目录绑定
+        type: string
+      image:
+        description: Docker 镜像
+        type: string
+      user:
+        description: 用户
+        type: string
+      workDir:
+        description: 工作目录
+        type: string
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.ExecuteOptions:
+    properties:
+      env:
+        additionalProperties:
+          type: string
+        description: Env 指定命令执行时的环境变量
+        type: object
+      metadata:
+        additionalProperties:
+          type: string
+        description: Metadata 存储额外的元数据信息
+        type: object
+      timeout:
+        description: |-
+          Timeout 指定命令执行的超时时间（纳秒）
+          swagger:strfmt int64
+        example: 30000000000
+        type: integer
+      user:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.User'
+        description: User 指定执行命令的用户信息
+      workdir:
+        description: WorkDir 指定命令执行的工作目录，所有相对路径都相对于此目录
+        type: string
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.LocalConfig:
+    properties:
+      allowUnregisteredCommands:
+        description: 是否允许执行未注册的命令
+        type: boolean
+      useBuiltinCommands:
+        description: 是否使用内置命���
+        type: boolean
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.Session:
+    properties:
+      created_at:
+        description: 会话创建时间
+        type: string
+      id:
+        description: 会话的唯一标识符
+        example: sess_123
+        type: string
+      last_accessed_at:
+        description: 最后访问时间
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        description: 会话相关的元数据
+        type: object
+      options:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.ExecuteOptions'
+        description: 会话的执行选项
+      status:
+        description: 会话状态
+        type: string
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.SessionRequest:
+    properties:
+      docker_config:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.DockerConfig'
+        description: Docker 执行器配置
+      executor_type:
+        description: 执行器类型（local/docker）
+        type: string
+      local_config:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.LocalConfig'
+        description: 本地执行器配置
+      metadata:
+        additionalProperties:
+          type: string
+        description: 会话元数据
+        type: object
+      options:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.ExecuteOptions'
+        description: 执行选项
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.SessionResponse:
+    properties:
+      error:
+        description: 错误信息
+        type: string
+      session:
+        allOf:
+        - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.Session'
+        description: 会话信息
+    type: object
+  github_com_iamlongalong_runshell_pkg_types.User:
+    properties:
+      gid:
+        description: GID 是用户组 ID
+        type: integer
+      groups:
+        description: Groups 是用户所属的附加组 ID 列表
+        items:
+          type: integer
+        type: array
+      uid:
+        description: UID 是用户 ID
+        type: integer
+      username:
+        description: Username 是用户名
+        type: string
+    type: object
+  pkg_server.ErrorResponse:
+    properties:
+      error:
+        description: 错误信息
+        example: Invalid request parameter
+        type: string
+    type: object
+  pkg_server.ExecRequest:
+    properties:
+      args:
+        description: 命令参数
+        example:
+        - '["-l"'
+        - '"-a"]'
+        items:
+          type: string
+        type: array
+      command:
+        description: 要执行的命令
+        example: ls
+        type: string
+      env:
+        additionalProperties:
+          type: string
+        description: 环境变量
+        type: object
+      workdir:
+        description: 工作目录
+        type: string
+    required:
+    - command
+    type: object
+  pkg_server.ExecResponse:
+    properties:
+      error:
+        description: 错误信息，如果有的话
+        type: string
+      exit_code:
+        description: 命令退出码
+        example: 0
+        type: integer
+      output:
+        description: 命令输出
+        example: file1.txt
+        type: string
+    type: object
+host: localhost:7070
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API for executing and managing shell commands
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: RunShell API
+  version: "1.0"
+paths:
+  /commands:
+    get:
+      consumes:
+      - application/json
+      description: List all available commands
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.CommandInfo'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: List Commands
+      tags:
+      - commands
+  /exec:
+    post:
+      consumes:
+      - application/json
+      description: Execute a shell command
+      parameters:
+      - description: Command execution request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_server.ExecRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/pkg_server.ExecResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: Execute Command
+      tags:
+      - commands
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Check if the server is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: Health Check
+      tags:
+      - health
+  /help:
+    get:
+      consumes:
+      - application/json
+      description: Get help information for a specific command
+      parameters:
+      - description: Command name
+        in: query
+        name: command
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: Get Command Help
+      tags:
+      - commands
+  /sessions:
+    get:
+      consumes:
+      - application/json
+      description: List all active sessions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.Session'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: List Sessions
+      tags:
+      - sessions
+    post:
+      consumes:
+      - application/json
+      description: Create a new session
+      parameters:
+      - description: Session creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.SessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.SessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: Create Session
+      tags:
+      - sessions
+  /sessions/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a session by ID
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: Delete Session
+      tags:
+      - sessions
+  /sessions/{id}/exec:
+    post:
+      consumes:
+      - application/json
+      description: Execute a command in a specific session
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Command execution request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_server.ExecRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/pkg_server.ExecResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/pkg_server.ErrorResponse'
+      summary: Execute Command in Session
+      tags:
+      - sessions
+schemes:
+- http
+securityDefinitions:
+  BasicAuth:
+    type: basic
+swagger: "2.0"

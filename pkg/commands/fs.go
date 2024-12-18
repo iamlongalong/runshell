@@ -22,8 +22,17 @@ func (c *LSCommand) Info() types.CommandInfo {
 
 // Execute 执行 ls 命令。
 func (c *LSCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "ls", Args: ctx.Command.Args},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // CatCommand 实现了 cat 命令。
@@ -44,8 +53,17 @@ func (c *CatCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("no file specified")
 	}
 
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "cat", Args: ctx.Command.Args},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // MkdirCommand 实现了 mkdir 命令。
@@ -66,8 +84,17 @@ func (c *MkdirCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 		return nil, fmt.Errorf("no directory specified")
 	}
 
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "mkdir", Args: ctx.Command.Args},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // RmCommand 实现了 rm 命令。
@@ -88,8 +115,17 @@ func (c *RmCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("no file specified")
 	}
 
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "rm", Args: ctx.Command.Args},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // CpCommand 实现了 cp 命令。
@@ -110,8 +146,17 @@ func (c *CpCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("cp requires source and destination")
 	}
 
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "cp", Args: ctx.Command.Args},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }
 
 // PWDCommand 实现了 pwd 命令。
@@ -162,6 +207,30 @@ func (c *ReadFileCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 		return nil, fmt.Errorf("no file specified")
 	}
 
-	// 直接使用执行器执行命令
-	return ctx.Executor.Execute(ctx)
+	// 如果提供了行号参数，验证它们
+	if len(ctx.Command.Args) >= 3 {
+		startLine := ctx.Command.Args[1]
+		endLine := ctx.Command.Args[2]
+		if startLine < "1" {
+			return nil, fmt.Errorf("invalid start line: %s", startLine)
+		}
+		if endLine < "1" {
+			return nil, fmt.Errorf("invalid end line: %s", endLine)
+		}
+		if startLine > endLine {
+			return nil, fmt.Errorf("start line (%s) is greater than end line (%s)", startLine, endLine)
+		}
+	}
+
+	// 创建一个新的上下文，避免递归调用
+	newCtx := &types.ExecuteContext{
+		Context:     ctx.Context,
+		Command:     types.Command{Command: "cat", Args: []string{ctx.Command.Args[0]}},
+		Options:     ctx.Options,
+		Executor:    ctx.Executor,
+		PipeContext: ctx.PipeContext,
+	}
+
+	// 直接使用执行器执行系统命令
+	return ctx.Executor.Execute(newCtx)
 }

@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	serverAddr  string
-	auditDir    string
-	dockerImage string
+	serverAddr   string
+	auditDir     string
+	dockerImage  string
+	executorType string
 )
 
 var serverCmd = &cobra.Command{
@@ -26,7 +27,7 @@ var serverCmd = &cobra.Command{
 	Long:  `Start the HTTP server to handle command execution requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 创建执行器构建器
-		execBuilder, err := createExecutorBuilder(dockerImage)
+		execBuilder, err := createExecutorBuilder(executorType)
 		if err != nil {
 			return fmt.Errorf("failed to create executor builder: %w", err)
 		}
@@ -59,6 +60,8 @@ var serverCmd = &cobra.Command{
 			return fmt.Errorf("failed to start server: %w", err)
 		}
 
+		fmt.Printf("Server started on %s\n", serverAddr)
+
 		// 等待中断信号
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -78,14 +81,18 @@ func init() {
 	serverCmd.Flags().StringVar(&serverAddr, "addr", ":8080", "Server address")
 	serverCmd.Flags().StringVar(&auditDir, "audit-dir", "", "Directory for audit logs")
 	serverCmd.Flags().StringVar(&dockerImage, "docker-image", "", "Docker image to use")
+	serverCmd.Flags().StringVar(&executorType, "executor-type", "local", "Type of executor to use (local or docker)")
 }
 
 // createExecutorBuilder 创建执行器构建器
 func createExecutorBuilder(execType string) (types.ExecutorBuilder, error) {
 	switch execType {
 	case "docker":
+		if dockerImage == "" {
+			dockerImage = "ubuntu:latest"
+		}
 		return executor.NewDockerExecutorBuilder(types.DockerConfig{
-			Image:                     "ubuntu:latest",
+			Image:                     dockerImage,
 			WorkDir:                   "/workspace",
 			AllowUnregisteredCommands: true,
 		}).WithOptions(nil), nil

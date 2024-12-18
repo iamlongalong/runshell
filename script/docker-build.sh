@@ -10,6 +10,10 @@ set -x
 VERSION=$(git describe --tags --always --dirty)
 COMMIT=$(git rev-parse --short HEAD)
 
+# 生成 Swagger 文档
+which swag >/dev/null || go install github.com/swaggo/swag/cmd/swag@latest
+swag init -g pkg/server/server.go -o cmd/runshell/docs --parseDependency
+
 # 构建 Docker 镜像
 docker build \
   --build-arg VERSION=${VERSION} \

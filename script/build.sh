@@ -11,6 +11,10 @@ VERSION=$(git describe --tags --always --dirty)
 COMMIT=$(git rev-parse --short HEAD)
 BUILD_TIME=$(date -u '+%Y-%m-%d_%H:%M:%S')
 
+# 生成 Swagger 文档
+which swag >/dev/null || go install github.com/swaggo/swag/cmd/swag@latest
+swag init -g pkg/server/server.go -o cmd/runshell/docs --parseDependency
+
 # 编译参数
 LDFLAGS="-X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildTime=${BUILD_TIME}"
 
