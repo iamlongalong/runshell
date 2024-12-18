@@ -3,12 +3,43 @@ package docker
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) {
+	// Skip if running in GitHub Actions
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		os.Exit(0)
+		return
+	}
+
+	// Skip if Docker is not installed
+	if _, err := exec.LookPath("docker"); err != nil {
+		os.Exit(0)
+		return
+	}
+
+	// Pull required images
+	images := []string{
+		"ubuntu:latest",
+		"busybox:latest",
+	}
+
+	for _, image := range images {
+		cmd := exec.Command("docker", "pull", image)
+		if err := cmd.Run(); err != nil {
+			panic("Failed to pull Docker image " + image + ": " + err.Error())
+		}
+	}
+
+	// Run tests
+	os.Exit(m.Run())
+}
 
 func TestDockerExecutor_Execute(t *testing.T) {
 	// 跳过如果没有 docker 命令
@@ -104,7 +135,7 @@ func TestDockerExecutor_Execute(t *testing.T) {
 				defer exec.Close()
 			}
 
-			// 如果创建执行器失败且期望错误，则测试通过
+			// 如果创建执行器失���且期望错误，则测试通过
 			if exec == nil && tt.wantErr {
 				return
 			}
@@ -254,7 +285,7 @@ func TestDockerExecutor_WorkDir(t *testing.T) {
 			}
 			defer exec.Close()
 
-			// 准备执行上下文
+			// ���备执行上下文
 			var output bytes.Buffer
 			ctx := &types.ExecuteContext{
 				Context: context.Background(),
