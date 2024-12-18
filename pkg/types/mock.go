@@ -34,6 +34,11 @@ func (m *MockExecutor) Name() string {
 	return "mock"
 }
 
+// ExecuteCommand 直接执行命令
+func (m *MockExecutor) ExecuteCommand(ctx *ExecuteContext) (*ExecuteResult, error) {
+	return m.Execute(ctx)
+}
+
 // Execute 执行命令。
 func (m *MockExecutor) Execute(ctx *ExecuteContext) (*ExecuteResult, error) {
 	if m.ExecuteFunc != nil {
@@ -264,6 +269,7 @@ func (m *MockExecutor) Execute(ctx *ExecuteContext) (*ExecuteResult, error) {
 		// 这些命令已经在各自的Command实现中处理
 		if command, ok := m.commands.Load(cmd); ok {
 			if cmd, ok := command.(ICommand); ok {
+				ctx.Executor = m
 				return cmd.Execute(ctx)
 			}
 		}
@@ -552,7 +558,7 @@ type mockExecutorBuilder struct {
 	mockExec *MockExecutor
 }
 
-func (b *mockExecutorBuilder) Build() (Executor, error) {
+func (b *mockExecutorBuilder) Build(options *ExecuteOptions) (Executor, error) {
 	return b.mockExec, nil
 }
 

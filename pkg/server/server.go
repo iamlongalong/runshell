@@ -25,7 +25,7 @@ func init() {
 	docs.SwaggerInfo.Title = "RunShell API"
 	docs.SwaggerInfo.Description = "API for executing and managing shell commands"
 	docs.SwaggerInfo.Version = "1.0"
-	docs.SwaggerInfo.Host = "localhost:7070"
+	docs.SwaggerInfo.Host = "localhost:8080"
 	docs.SwaggerInfo.BasePath = "/api/v1"
 	docs.SwaggerInfo.Schemes = []string{"http"}
 }
@@ -42,7 +42,7 @@ func init() {
 // @license.name  Apache 2.0
 // @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
 
-// @host      localhost:7070
+// @host      localhost:8080
 // @BasePath  /api/v1
 // @schemes   http
 
@@ -57,10 +57,11 @@ type ErrorResponse struct {
 // ExecRequest 表示执行命令的请求
 // swagger:model
 type ExecRequest struct {
-	Command string            `json:"command" binding:"required" example:"ls"`  // 要执行的命令
-	Args    []string          `json:"args,omitempty" example:"[\"-l\",\"-a\"]"` // 命令参数
-	WorkDir string            `json:"workdir,omitempty"`                        // 工作目录
-	Env     map[string]string `json:"env,omitempty"`                            // 环境变量
+	Command string   `json:"command" binding:"required" example:"ls"`  // 要执行的命令
+	Args    []string `json:"args,omitempty" example:"[\"-l\",\"-a\"]"` // 命令参数
+
+	WorkDir string            `json:"workdir,omitempty"` // 工作目录
+	Env     map[string]string `json:"env,omitempty"`     // 环境变量
 }
 
 // ExecResponse 表示执行命令的响应
@@ -114,7 +115,7 @@ func NewServer(executorBuilder types.ExecutorBuilder, addr string) *Server {
 		// 如果是 JSON 请求，打印请求体
 		if c.Request.Body != nil && c.Request.Header.Get("Content-Type") == "application/json" {
 			bodyBytes, _ := io.ReadAll(c.Request.Body)
-			// 重新设置 body 以供后续中间件使用
+			// 重新设置 body 以供后���中间件使用
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			fmt.Printf("Request Body (JSON):\n%s\n", string(bodyBytes))
 		}
@@ -223,6 +224,7 @@ func (s *Server) setupRoutes() {
 
 		// 命令执行
 		v1.POST("/exec", s.handleExec)
+		v1.GET("/exec/interactive", s.handleInteractiveExec)
 		v1.GET("/commands", s.handleListCommands)
 		v1.GET("/help", s.handleCommandHelp)
 
@@ -321,7 +323,10 @@ func (s *Server) handleExec(c *gin.Context) {
 
 	fmt.Printf("Received exec request: %+v\n", req)
 
-	executor, err := s.executorBuilder.Build()
+	executor, err := s.executorBuilder.Build(&types.ExecuteOptions{
+		WorkDir: req.WorkDir,
+		Env:     req.Env,
+	})
 	if err != nil {
 		s.handleError(c, http.StatusInternalServerError, err, fmt.Sprintf("Failed to create executor: %v", err))
 		return
@@ -383,7 +388,7 @@ func (s *Server) handleExec(c *gin.Context) {
 // @Failure     500 {object} ErrorResponse
 // @Router      /commands [get]
 func (s *Server) handleListCommands(c *gin.Context) {
-	executor, err := s.executorBuilder.Build()
+	executor, err := s.executorBuilder.Build(nil)
 	if err != nil {
 		s.handleError(c, http.StatusInternalServerError, err, fmt.Sprintf("Failed to create executor: %v", err))
 		return
@@ -410,7 +415,7 @@ func (s *Server) handleCommandHelp(c *gin.Context) {
 		return
 	}
 
-	executor, err := s.executorBuilder.Build()
+	executor, err := s.executorBuilder.Build(nil)
 	if err != nil {
 		s.handleError(c, http.StatusInternalServerError, err, fmt.Sprintf("Failed to create executor: %v", err))
 		return
@@ -454,12 +459,16 @@ func (s *Server) handleListSessions(c *gin.Context) {
 // @Router      /sessions [post]
 func (s *Server) handleCreateSession(c *gin.Context) {
 	var req types.SessionRequest
+	// TODO: 支持 builder 的配置，可使用 config 来配置
 	if err := c.ShouldBindJSON(&req); err != nil {
 		s.handleError(c, http.StatusBadRequest, err, "Invalid request format")
 		return
 	}
 
-	executor, err := s.executorBuilder.Build()
+	executor, err := s.executorBuilder.Build(&types.ExecuteOptions{
+		WorkDir: req.Options.WorkDir,
+		Env:     req.Options.Env,
+	})
 	if err != nil {
 		s.handleError(c, http.StatusInternalServerError, err, "")
 		return
@@ -486,6 +495,10 @@ func (s *Server) handleCreateSession(c *gin.Context) {
 // @Router      /sessions/{id} [delete]
 func (s *Server) handleDeleteSession(c *gin.Context) {
 	sessionID := c.Param("id")
+	if sessionID == "" {
+		s.handleError(c, http.StatusBadRequest, fmt.Errorf("session id is required"), "")
+		return
+	}
 	if err := s.sessionManager.DeleteSession(sessionID); err != nil {
 		s.handleError(c, http.StatusNotFound, err, "")
 		return
@@ -507,6 +520,11 @@ func (s *Server) handleDeleteSession(c *gin.Context) {
 // @Router      /sessions/{id}/exec [post]
 func (s *Server) handleSessionExec(c *gin.Context) {
 	sessionID := c.Param("id")
+	if sessionID == "" {
+		s.handleError(c, http.StatusBadRequest, fmt.Errorf("session id is required"), "")
+		return
+	}
+
 	session, err := s.sessionManager.GetSession(sessionID)
 	if err != nil {
 		s.handleError(c, http.StatusNotFound, err, "")

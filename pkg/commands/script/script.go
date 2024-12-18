@@ -330,7 +330,7 @@ func (s *Script) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error
 
 	// 执行命令
 	log.Debug("Executing command with context: %+v", newctx)
-	result, err := ctx.Executor.Execute(newctx)
+	result, err := ctx.Executor.ExecuteCommand(newctx)
 	if err != nil {
 		log.Error("Command execution failed: %v", err)
 		return nil, err

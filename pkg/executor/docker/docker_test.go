@@ -1,4 +1,4 @@
-package executor
+package docker
 
 import (
 	"bytes"
@@ -93,7 +93,7 @@ func TestDockerExecutor_Execute(t *testing.T) {
 			exec, err := NewDockerExecutor(types.DockerConfig{
 				Image:                     tt.dockerImage,
 				AllowUnregisteredCommands: true,
-			}, &types.ExecuteOptions{})
+			}, &types.ExecuteOptions{}, nil)
 			if err != nil {
 				if tt.wantErr {
 					return // 预期的错误情况
@@ -184,7 +184,7 @@ func TestDockerExecutor_ExecutePipeline(t *testing.T) {
 			executor, err := NewDockerExecutor(types.DockerConfig{
 				Image:   "alpine:latest",
 				WorkDir: "/workspace",
-			}, nil)
+			}, nil, nil)
 			if err != nil {
 				t.Fatalf("Failed to create Docker executor: %v", err)
 			}
@@ -248,7 +248,7 @@ func TestDockerExecutor_WorkDir(t *testing.T) {
 				Image:                     tt.dockerImage,
 				WorkDir:                   tt.workDir,
 				AllowUnregisteredCommands: true,
-			}, &types.ExecuteOptions{})
+			}, &types.ExecuteOptions{}, nil)
 			if err != nil {
 				t.Fatalf("Failed to create Docker executor: %v", err)
 			}
@@ -322,7 +322,7 @@ func TestDockerExecutor_Environment(t *testing.T) {
 			exec, err := NewDockerExecutor(types.DockerConfig{
 				Image:                     tt.dockerImage,
 				AllowUnregisteredCommands: true,
-			}, &types.ExecuteOptions{})
+			}, &types.ExecuteOptions{}, nil)
 			if err != nil {
 				t.Fatalf("Failed to create Docker executor: %v", err)
 			}
@@ -361,7 +361,7 @@ func TestDockerExecutor_ExecuteWithBindMount(t *testing.T) {
 		Image:                     "ubuntu:latest",
 		BindMount:                 "/tmp:/workspace",
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create Docker executor: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestDockerExecutor_ExecuteWithWorkDir(t *testing.T) {
 		Image:                     "ubuntu:latest",
 		WorkDir:                   "/app",
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create Docker executor: %v", err)
 	}
@@ -409,7 +409,7 @@ func TestDockerExecutor_ExecuteWithEnv(t *testing.T) {
 	exec, err := NewDockerExecutor(types.DockerConfig{
 		Image:                     "ubuntu:latest",
 		AllowUnregisteredCommands: true,
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 	if err != nil {
 		t.Fatalf("Failed to create Docker executor: %v", err)
 	}
@@ -431,4 +431,34 @@ func TestDockerExecutor_ExecuteWithEnv(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, result.ExitCode)
 	assert.Contains(t, result.Output, "TEST_VAR=test_value")
+}
+
+func TestNewDockerExecutor(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  types.DockerConfig
+		wantErr bool
+	}{
+		{
+			name:    "empty image",
+			config:  types.DockerConfig{},
+			wantErr: true,
+		},
+		{
+			name: "valid config",
+			config: types.DockerConfig{
+				Image: "ubuntu:latest",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewDockerExecutor(tt.config, nil, nil)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewDockerExecutor() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

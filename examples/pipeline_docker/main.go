@@ -17,16 +17,17 @@ import (
 	"strings"
 
 	"github.com/iamlongalong/runshell/pkg/executor"
+	"github.com/iamlongalong/runshell/pkg/executor/docker"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
 func main() {
 	// 创建 Docker 执行器
-	dockerExec, err := executor.NewDockerExecutorBuilder(types.DockerConfig{
+	dockerExec, err := docker.NewDockerExecutorBuilder(types.DockerConfig{
 		Image:                     "ubuntu:latest",
 		WorkDir:                   "/workspace",
 		AllowUnregisteredCommands: true,
-	}).WithOptions(&types.ExecuteOptions{}).Build()
+	}).WithOptions(&types.ExecuteOptions{}).Build(nil)
 	if err != nil {
 		log.Fatalf("Failed to create Docker executor: %v", err)
 	}

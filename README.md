@@ -74,43 +74,77 @@ runshell exec --workdir /tmp -- ls -l
 # Set environment variables
 runshell exec --env KEY=VALUE env
 
-
 # Example of using Docker image
 runshell exec --docker-image ubuntu:latest -- ls -l
 runshell exec --docker-image busybox:latest --env KEY=VALUE env
 runshell exec --docker-image busybox:latest --workdir /app -- python3 script.py
 
-
 # Start HTTP server
 runshell server --http :8080
+```
 
-# HTTP API Examples
-# Execute command via HTTP POST
-curl -X POST http://localhost:8080/exec \
+#### HTTP API Examples
+
+```bash
+# Health check
+curl http://localhost:8080/api/v1/health
+
+# Execute command
+curl -X POST http://localhost:8080/api/v1/exec \
   -H "Content-Type: application/json" \
   -d '{
-    "command": "ls -l",
+    "command": "ls",
+    "args": ["-l"],
     "workdir": "/tmp",
     "env": {"KEY": "VALUE"}
   }'
 
-# Execute command in Docker container
-curl -X POST http://localhost:8080/exec \
+# List available commands
+curl http://localhost:8080/api/v1/commands
+
+# Get command help
+curl http://localhost:8080/api/v1/help?command=ls
+
+# Session Management
+# Create new session, info: now does not support docker_config, only support options
+curl -X POST http://localhost:8080/api/v1/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "command": "python3 script.py",
-    "docker_image": "python:3.9",
-    "workdir": "/app",
-    "env": {"PYTHON_ENV": "production"}
+    "executor_type": "docker",
+    "docker_config": {
+      "image": "golang:1.20",
+      "workdir": "/workspace",
+      "bind_mount": "/local/path:/workspace"
+    },
+    "options": {
+      "workdir": "/workspace",
+      "env": {"GOPROXY": "https://goproxy.cn,direct"}
+    }
   }'
 
-# Get execution status
-curl http://localhost:8080/status/{execution_id}
+# List all sessions
+curl http://localhost:8080/api/v1/sessions
 
-# Stream command output
-curl http://localhost:8080/stream/{execution_id}
+# Execute command in session
+curl -X POST http://localhost:8080/api/v1/sessions/{session_id}/exec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "ls",
+    "args": ["-al"],
+    "options": {
+      "workdir": "/"
+    }
+  }'
 
+# Delete session
+curl -X DELETE http://localhost:8080/api/v1/sessions/{session_id}
 
+# Interactive shell (WebSocket)
+# npm install -g wscat
+wscat -c ws://localhost:8080/api/v1/exec/interactive
+# after connected, you can use the following commands:
+# ls -al
+# exit
 ```
 
 ## Development Guide

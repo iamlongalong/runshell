@@ -34,6 +34,9 @@ definitions:
       image:
         description: Docker 镜像
         type: string
+      useBuiltinCommands:
+        description: 是否使用内置命令
+        type: boolean
       user:
         description: 用户
         type: string
@@ -53,12 +56,18 @@ definitions:
           type: string
         description: Metadata 存储额外的元数据信息
         type: object
+      shell:
+        description: Shell 指定执行命令的 shell, 默认使用 /bin/bash
+        type: string
       timeout:
         description: |-
           Timeout 指定命令执行的超时时间（纳秒）
           swagger:strfmt int64
         example: 30000000000
         type: integer
+      tty:
+        description: TTY 是否分配伪终端
+        type: boolean
       user:
         allOf:
         - $ref: '#/definitions/github_com_iamlongalong_runshell_pkg_types.User'
@@ -73,8 +82,11 @@ definitions:
         description: 是否允许执行未注册的命令
         type: boolean
       useBuiltinCommands:
-        description: 是否使用内置命���
+        description: 是否使用内置命令
         type: boolean
+      workDir:
+        description: 工作目录
+        type: string
     type: object
   github_com_iamlongalong_runshell_pkg_types.Session:
     properties:
@@ -197,7 +209,7 @@ definitions:
         example: file1.txt
         type: string
     type: object
-host: localhost:7070
+host: localhost:8080
 info:
   contact:
     email: support@swagger.io

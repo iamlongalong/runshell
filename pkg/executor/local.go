@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"al.essio.dev/pkg/shellescape"
+	"github.com/creack/pty"
 	"github.com/iamlongalong/runshell/pkg/log"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
@@ -57,26 +58,76 @@ func (e *LocalExecutor) SetOptions(options *types.ExecuteOptions) {
 	e.options = options
 }
 
-// executeCommand 执行单命令
-func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+// Execute 执行命令
+func (e *LocalExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.IsPiped {
+		if ctx.PipeContext == nil || len(ctx.PipeContext.Commands) == 0 {
+			log.Error("No commands in pipeline")
+			return nil, fmt.Errorf("no commands in pipeline")
+		}
+	} else {
+		if ctx.Command.Command == "" {
+			log.Error("No command specified for execution")
+			return nil, fmt.Errorf("no command specified")
+		}
+	}
+
+	if ctx.Options == nil {
+		ctx.Options = &types.ExecuteOptions{}
+	}
+	if ctx.Options.WorkDir == "" && e.config.WorkDir != "" {
+		ctx.Options.WorkDir = e.config.WorkDir
+	}
+
+	// 如果是交互式命令
+	if ctx.Interactive {
+		return e.ExecuteInteractive(ctx)
+	}
+
+	log.Debug("Executing command: %s %v", ctx.Command.Command, ctx.Command.Args)
+	// 检查是否是内置命令
+	if cmd, ok := e.commands.Load(ctx.Command.Command); ok {
+		ctx.Executor = e
+		return cmd.(types.ICommand).Execute(ctx)
+	}
+
+	if !e.config.AllowUnregisteredCommands {
+		log.Error("Unregistered command not allowed: %s", ctx.Command.Command)
+		return nil, fmt.Errorf("unregistered command not allowed: %s", ctx.Command.Command)
+	}
+
+	// 非交互式命令的处理
+	return e.ExecuteCommand(ctx)
+}
+
+// ExecuteCommand 执行单命令
+func (e *LocalExecutor) ExecuteCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	if ctx == nil || ctx.Command.Command == "" {
 		log.Error("No command specified for execution")
 		return nil, fmt.Errorf("no command specified")
 	}
 
+	if ctx.Options == nil {
+		ctx.Options = &types.ExecuteOptions{}
+	}
+	if ctx.Options.WorkDir == "" && e.config.WorkDir != "" {
+		ctx.Options.WorkDir = e.config.WorkDir
+	}
+
 	log.Debug("Executing local command: %v", ctx.Command.Args)
 
-	// 检查是否是内置命令
-	if cmd, ok := e.commands.Load(ctx.Command.Command); ok {
-		log.Debug("Found built-in command: %s", ctx.Command)
-		command := cmd.(types.ICommand)
-		return command.Execute(ctx)
+	if ctx.IsPiped {
+		return e.executePipeline(ctx)
 	}
 
-	if !e.config.AllowUnregisteredCommands {
-		log.Error("Unregistered command not allowed: %s", ctx.Command)
-		return nil, fmt.Errorf("unregistered command not allowed: %s", ctx.Command)
-	}
+	return e.execute(ctx)
+}
+
+func (e *LocalExecutor) execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 
 	// 准备命令
 	cmdPath, err := exec.LookPath(ctx.Command.Command)
@@ -122,159 +173,6 @@ func (e *LocalExecutor) executeCommand(ctx *types.ExecuteContext) (*types.Execut
 		}
 	} else {
 		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
-	}
-
-	// 执行命令
-	startTime := types.GetTimeNow()
-	err = cmd.Run()
-	endTime := types.GetTimeNow()
-
-	// 准备结果
-	result := &types.ExecuteResult{
-		CommandName: ctx.Command.Command,
-		StartTime:   startTime,
-		EndTime:     endTime,
-	}
-
-	// 合并输出
-	result.Output = stdoutBuf.String()
-	if stderrBuf.Len() > 0 {
-		if result.Output != "" {
-			result.Output += "\n"
-		}
-		result.Output += stderrBuf.String()
-	}
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			result.ExitCode = 1
-		}
-		result.Error = err
-		log.Error("Command execution failed: %v", err)
-		return result, err
-	}
-
-	result.ExitCode = 0
-	return result, nil
-}
-
-// Execute 执行命令
-func (e *LocalExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	if ctx == nil {
-		return nil, fmt.Errorf("context is nil")
-	}
-
-	// 检查命令是否为空
-	if ctx.Command.Command == "" {
-		return nil, fmt.Errorf("no command specified")
-	}
-
-	log.Debug("Executing command: %s %v", ctx.Command.Command, ctx.Command.Args)
-
-	// 检查是否是内置命令
-	if cmd, ok := e.commands.Load(ctx.Command.Command); ok {
-		log.Debug("Found built-in command: %s", ctx.Command.Command)
-		command := cmd.(types.ICommand)
-		return command.Execute(ctx)
-	}
-
-	if !e.config.AllowUnregisteredCommands {
-		log.Error("Unregistered command not allowed: %s", ctx.Command.Command)
-		return nil, fmt.Errorf("unregistered command not allowed: %s", ctx.Command.Command)
-	}
-
-	// 准备命令
-	cmdPath, err := exec.LookPath(ctx.Command.Command)
-	if err != nil {
-		log.Error("Command not found: %s", ctx.Command.Command)
-		return nil, fmt.Errorf("command not found: %s", ctx.Command.Command)
-	}
-	log.Debug("Found command path: %s", cmdPath)
-
-	// 创建命令
-	cmd := exec.CommandContext(ctx.Context, cmdPath, ctx.Command.Args...)
-
-	// 合并选项，避免递归
-	finalOptions := &types.ExecuteOptions{
-		Env:      make(map[string]string),
-		Metadata: make(map[string]string),
-	}
-
-	// 首先应用执行器的默认选项
-	if e.options != nil {
-		if e.options.WorkDir != "" {
-			finalOptions.WorkDir = e.options.WorkDir
-		}
-		if e.options.Env != nil {
-			for k, v := range e.options.Env {
-				finalOptions.Env[k] = v
-			}
-		}
-		finalOptions.Timeout = e.options.Timeout
-		finalOptions.Stdin = e.options.Stdin
-		finalOptions.Stdout = e.options.Stdout
-		finalOptions.Stderr = e.options.Stderr
-		finalOptions.User = e.options.User
-	}
-
-	// 然后应用上下文中的选项，覆盖默认选项
-	if ctx.Options != nil {
-		if ctx.Options.WorkDir != "" {
-			finalOptions.WorkDir = ctx.Options.WorkDir
-		}
-		if ctx.Options.Env != nil {
-			for k, v := range ctx.Options.Env {
-				finalOptions.Env[k] = v
-			}
-		}
-		if ctx.Options.Timeout != 0 {
-			finalOptions.Timeout = ctx.Options.Timeout
-		}
-		if ctx.Options.Stdin != nil {
-			finalOptions.Stdin = ctx.Options.Stdin
-		}
-		if ctx.Options.Stdout != nil {
-			finalOptions.Stdout = ctx.Options.Stdout
-		}
-		if ctx.Options.Stderr != nil {
-			finalOptions.Stderr = ctx.Options.Stderr
-		}
-		if ctx.Options.User != nil {
-			finalOptions.User = ctx.Options.User
-		}
-	}
-
-	// 设置工作目录
-	if finalOptions.WorkDir != "" {
-		log.Debug("Setting working directory: %s", finalOptions.WorkDir)
-		cmd.Dir = finalOptions.WorkDir
-	}
-
-	// 设置环境变量
-	if len(finalOptions.Env) > 0 {
-		log.Debug("Setting environment variables: %v", finalOptions.Env)
-		cmd.Env = os.Environ()
-		for k, v := range finalOptions.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
-
-	// 设置输入输出
-	var stdoutBuf, stderrBuf bytes.Buffer
-	if finalOptions.Stdin != nil {
-		cmd.Stdin = finalOptions.Stdin
-	}
-	if finalOptions.Stdout != nil {
-		cmd.Stdout = io.MultiWriter(&stdoutBuf, finalOptions.Stdout)
-	} else {
-		cmd.Stdout = &stdoutBuf
-	}
-	if finalOptions.Stderr != nil {
-		cmd.Stderr = io.MultiWriter(&stderrBuf, finalOptions.Stderr)
-	} else {
 		cmd.Stderr = &stderrBuf
 	}
 
@@ -488,4 +386,161 @@ func (e *LocalExecutor) executePipeline(ctx *types.ExecuteContext) (*types.Execu
 
 	result.ExitCode = 0
 	return result, nil
+}
+
+// ExecuteInteractive 执行交互式命令
+func (e *LocalExecutor) ExecuteInteractive(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx.Options == nil {
+		ctx.Options = &types.ExecuteOptions{}
+	}
+
+	// 创建命令
+	cmd := exec.CommandContext(ctx.Context, ctx.Command.Command, ctx.Command.Args...)
+
+	// 设置工作目录
+	if ctx.Options.WorkDir != "" {
+		cmd.Dir = ctx.Options.WorkDir
+	}
+
+	if ctx.Options.User == nil {
+		ctx.Options.User = &types.User{
+			Username: "",
+		}
+	}
+
+	if ctx.Options.Shell == "" {
+		ctx.Options.Shell = "bash"
+	}
+
+	// 设置基本的终端环境变量
+	defaultEnv := map[string]string{
+		"TERM":      ctx.InteractiveOpts.TerminalType,
+		"COLORTERM": "truecolor",
+		"LANG":      "en_US.UTF-8",
+		"LC_ALL":    "en_US.UTF-8",
+		"PS1":       "\\w\\$ ", // 设置简单的提示符
+	}
+
+	if ctx.Options.WorkDir != "" {
+		defaultEnv["HOME"] = ctx.Options.WorkDir
+	}
+	if ctx.Options.User.Username != "" {
+		defaultEnv["USER"] = ctx.Options.User.Username
+	}
+	if ctx.Options.Shell != "" {
+		defaultEnv["SHELL"] = ctx.Options.Shell
+	}
+
+	envMap := make(map[string]string)
+	envMap = mergeEnv(envMap, defaultEnv)
+	envMap = mergeEnv(envMap, ctx.Options.Env)
+
+	// 合并环境变量
+	for k, v := range envMap {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	// 创建伪终端
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start pty: %w", err)
+	}
+	defer ptmx.Close()
+
+	// 设置终端大小
+	if ctx.InteractiveOpts != nil && ctx.InteractiveOpts.Rows > 0 && ctx.InteractiveOpts.Cols > 0 {
+		if err := pty.Setsize(ptmx, &pty.Winsize{
+			Rows: ctx.InteractiveOpts.Rows,
+			Cols: ctx.InteractiveOpts.Cols,
+		}); err != nil {
+			log.Error("Failed to resize pty: %v", err)
+		}
+	}
+
+	// 创建等待组和错误通道
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	// 处理输入
+	if ctx.Options.Stdin != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := io.Copy(ptmx, ctx.Options.Stdin)
+			if err != nil {
+				log.Error("Failed to copy stdin: %v", err)
+				errCh <- err
+			}
+		}()
+	}
+
+	// 处理输出
+	if ctx.Options.Stdout != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := io.Copy(ctx.Options.Stdout, ptmx)
+			if err != nil {
+				log.Error("Failed to copy stdout: %v", err)
+				errCh <- err
+			}
+		}()
+	}
+
+	// 创建完成通道
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	// 等待命令完成或出错
+	startTime := types.GetTimeNow()
+	cmdDone := make(chan error, 1)
+	go func() {
+		cmdDone <- cmd.Wait()
+	}()
+
+	var cmdErr error
+	select {
+	case err := <-cmdDone:
+		cmdErr = err
+	case err := <-errCh:
+		cmdErr = err
+		cmd.Process.Kill()
+	case <-ctx.Context.Done():
+		cmdErr = ctx.Context.Err()
+		cmd.Process.Kill()
+	}
+
+	endTime := types.GetTimeNow()
+
+	// 等待 IO 完成
+	<-doneCh
+
+	result := &types.ExecuteResult{
+		CommandName: ctx.Command.Command,
+		StartTime:   startTime,
+		EndTime:     endTime,
+	}
+
+	if cmdErr != nil {
+		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
+			result.ExitCode = exitErr.ExitCode()
+		} else {
+			result.ExitCode = 1
+		}
+		result.Error = cmdErr
+		return result, cmdErr
+	}
+
+	result.ExitCode = 0
+	return result, nil
+}
+
+func mergeEnv(env1, env2 map[string]string) map[string]string {
+	for k, v := range env2 {
+		env1[k] = v
+	}
+	return env1
 }

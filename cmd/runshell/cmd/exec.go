@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/iamlongalong/runshell/pkg/executor"
+	"github.com/iamlongalong/runshell/pkg/executor/docker"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -15,6 +16,7 @@ var (
 	execWorkDir       string
 	execEnvVars       []string
 	allowUnregistered bool
+	execType          string
 )
 
 var execCmd = &cobra.Command{
@@ -27,7 +29,13 @@ var execCmd = &cobra.Command{
 		}
 
 		// 创建执行器
-		exec, err := createExecutor(execDockerImage)
+		exec, err := createExecutor(execType, &types.ExecuteOptions{
+			WorkDir: execWorkDir,
+			Env:     parseEnvVars(execEnvVars),
+			Stdin:   os.Stdin,
+			Stdout:  os.Stdout,
+			Stderr:  os.Stderr,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to create executor: %w", err)
 		}
@@ -82,24 +90,38 @@ func parseEnvVars(vars []string) map[string]string {
 }
 
 // createExecutor 创建执行器
-func createExecutor(execType string) (types.Executor, error) {
+func createExecutor(execType string, options *types.ExecuteOptions) (types.Executor, error) {
 	var builder types.ExecutorBuilder
+
+	if options == nil {
+		options = &types.ExecuteOptions{}
+	}
 
 	switch execType {
 	case "docker":
-		builder = executor.NewDockerExecutorBuilder(types.DockerConfig{
-			Image:                     "ubuntu:latest",
-			WorkDir:                   "/workspace",
+		if execDockerImage == "" {
+			execDockerImage = "ubuntu:latest"
+		}
+
+		workDir := options.WorkDir
+		if workDir == "" {
+			workDir = "/workspace"
+		}
+
+		builder = docker.NewDockerExecutorBuilder(types.DockerConfig{
+			Image:                     execDockerImage,
+			WorkDir:                   workDir,
 			AllowUnregisteredCommands: true,
-		}).WithOptions(nil)
+		}).WithOptions(options)
 	case "local":
 		builder = executor.NewLocalExecutorBuilder(types.LocalConfig{
 			AllowUnregisteredCommands: true,
 			UseBuiltinCommands:        true,
-		}).WithOptions(nil)
+			WorkDir:                   workDir,
+		}).WithOptions(options)
 	default:
 		return nil, fmt.Errorf("unsupported executor type: %s", execType)
 	}
 
-	return builder.Build()
+	return builder.Build(options)
 }

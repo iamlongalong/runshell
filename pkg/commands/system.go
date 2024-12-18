@@ -24,7 +24,7 @@ func (c *PSCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 type TopCommand struct{}
@@ -44,7 +44,7 @@ func (c *TopCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 type DFCommand struct{}
@@ -64,7 +64,7 @@ func (c *DFCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // UNameCommand 实现了 'uname' 命令。
@@ -87,7 +87,7 @@ func (c *UNameCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 type EnvCommand struct{}
@@ -107,7 +107,7 @@ func (c *EnvCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 type KillCommand struct{}
@@ -138,5 +138,5 @@ func (c *KillCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		}
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }

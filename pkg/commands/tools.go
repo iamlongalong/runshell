@@ -29,7 +29,7 @@ func (c *WgetCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("wget: missing URL")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // TarCommand 实现了 tar 命令。
@@ -54,7 +54,7 @@ func (c *TarCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("tar: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // ZipCommand 实现了 zip 命令。
@@ -83,5 +83,5 @@ func (c *ZipCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("zip: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }

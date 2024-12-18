@@ -8,8 +8,8 @@ import (
 // LocalExecutorBuilder 是本地执行器的构建器。
 type LocalExecutorBuilder struct {
 	config   types.LocalConfig
-	options  *types.ExecuteOptions
 	provider types.BuiltinCommandProvider
+	options  *types.ExecuteOptions
 }
 
 // NewLocalExecutorBuilder 创建一个新的本地执行器构建器。
@@ -32,9 +32,12 @@ func (b *LocalExecutorBuilder) WithProvider(provider types.BuiltinCommandProvide
 }
 
 // Build 构建并返回一个新的本地执行器实例。
-func (b *LocalExecutorBuilder) Build() (types.Executor, error) {
+func (b *LocalExecutorBuilder) Build(opt *types.ExecuteOptions) (types.Executor, error) {
 	if b.provider == nil && b.config.UseBuiltinCommands {
 		b.provider = commands.NewDefaultCommandProvider()
 	}
-	return NewLocalExecutor(b.config, b.options, b.provider), nil
+	if opt == nil {
+		opt = b.options
+	}
+	return NewLocalExecutor(b.config, opt, b.provider), nil
 }

@@ -27,7 +27,7 @@ func (c *GitCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // GoCommand 实现了 go 命令。
@@ -51,7 +51,7 @@ func (c *GoCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("executor is required")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // PythonCommand 实现了 python 命令。
@@ -77,7 +77,7 @@ func (c *PythonCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult
 		return nil, fmt.Errorf("python: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // PipCommand 实现了 pip 命令。
@@ -103,7 +103,7 @@ func (c *PipCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("pip: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // 用于管理容器和镜像。
@@ -128,7 +128,7 @@ func (c *DockerCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult
 		return nil, fmt.Errorf("docker: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // NodeCommand 实现了 node 命令。
@@ -154,7 +154,7 @@ func (c *NodeCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("node: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // NPMCommand 实现了 npm 命令。
@@ -180,5 +180,5 @@ func (c *NPMCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 		return nil, fmt.Errorf("npm: missing operand")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }

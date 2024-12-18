@@ -5,6 +5,7 @@ package executor
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/iamlongalong/runshell/pkg/log"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
@@ -32,10 +33,16 @@ func (e *AuditedExecutor) Name() string {
 	return AuditedExecutorName
 }
 
+// ExecuteCommand 执行命令并记录审计日志
+func (e *AuditedExecutor) ExecuteCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	return e.Execute(ctx)
+}
+
 // Execute 执行命令并记录审计日志
 func (e *AuditedExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
 	// 创建审计记录
 	execution := &types.CommandExecution{
+		ID:        uuid.New().String(),
 		Command:   ctx.Command,
 		StartTime: time.Now(),
 		Status:    "STARTED",

@@ -393,6 +393,10 @@ const docTemplate = `{
                     "description": "Docker 镜像",
                     "type": "string"
                 },
+                "useBuiltinCommands": {
+                    "description": "是否使用内置命令",
+                    "type": "boolean"
+                },
                 "user": {
                     "description": "用户",
                     "type": "string"
@@ -420,10 +424,18 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "shell": {
+                    "description": "Shell 指定执行命令的 shell, 默认使用 /bin/bash",
+                    "type": "string"
+                },
                 "timeout": {
                     "description": "Timeout 指定命令执行的超时时间（纳秒）\nswagger:strfmt int64",
                     "type": "integer",
                     "example": 30000000000
+                },
+                "tty": {
+                    "description": "TTY 是否分配伪终端",
+                    "type": "boolean"
                 },
                 "user": {
                     "description": "User 指定执行命令的用户信息",
@@ -447,8 +459,12 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "useBuiltinCommands": {
-                    "description": "是否使用内置命���",
+                    "description": "是否使用内置命令",
                     "type": "boolean"
+                },
+                "workDir": {
+                    "description": "工作目录",
+                    "type": "string"
                 }
             }
         },
@@ -645,7 +661,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:7070",
+	Host:             "localhost:8080",
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http"},
 	Title:            "RunShell API",

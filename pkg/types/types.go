@@ -34,9 +34,15 @@ type ExecuteOptions struct {
 
 	// Metadata 存储额外的元数据信息
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// TTY 是否分配伪终端
+	TTY bool `json:"tty,omitempty"`
+
+	// Shell 指定执行命令的 shell, 默认使用 /bin/bash
+	Shell string `json:"shell,omitempty"`
 }
 
-// Merge 合并两个执行选项, 用于处理默认选项和用��自定义选项
+// Merge 合并两个执行选项, 用于处理默认选项和用自定义选项
 func (opts *ExecuteOptions) Merge(other *ExecuteOptions) *ExecuteOptions {
 	if other == nil {
 		if opts == nil {
@@ -90,7 +96,7 @@ func (opts *ExecuteOptions) Merge(other *ExecuteOptions) *ExecuteOptions {
 		Metadata: make(map[string]string),
 	}
 
-	// 复制当前选项的环境变量
+	// 复制当前选项��环境变量
 	if opts.Env != nil {
 		for k, v := range opts.Env {
 			result.Env[k] = v
@@ -175,6 +181,12 @@ type ExecuteContext struct {
 
 	// Executor 是执行器实例
 	Executor Executor
+
+	// Interactive 是否是交互式命令
+	Interactive bool
+
+	// InteractiveOpts 交互式选项
+	InteractiveOpts *InteractiveOptions
 }
 
 func (ctx *ExecuteContext) Copy() *ExecuteContext {
@@ -283,8 +295,11 @@ type Executor interface {
 	// Name 返回执行器名称
 	Name() string
 
-	// Execute 执行命令
+	// Execute 执行命令 (包含内置命令代理)
 	Execute(ctx *ExecuteContext) (*ExecuteResult, error)
+
+	// ExecuteCommand 直接执行命令
+	ExecuteCommand(ctx *ExecuteContext) (*ExecuteResult, error)
 
 	// ListCommands 出所有可用命令
 	ListCommands() []CommandInfo
@@ -351,7 +366,7 @@ type Session struct {
 	Metadata       map[string]string `json:"metadata,omitempty"`    // 会话相关的元数据
 	Status         string            `json:"status"`                // 会话状态
 
-	// 以下字��不会在 JSON 中序列化
+	// 以下字不会在 JSON 中序列化
 	Executor Executor           `json:"-"` // 会话使用的执行器
 	Context  context.Context    `json:"-"` // 会话的上下文
 	Cancel   context.CancelFunc `json:"-"` // 用于取消会话的函数
@@ -401,8 +416,8 @@ type SessionResponse struct {
 
 // CommandExecution 表示命令执行记录
 type CommandExecution struct {
-	Command Command // 命令
-
+	ID        string    // 命令执行的唯一标识符
+	Command   Command   // 命令
 	StartTime time.Time // 开始时间
 	EndTime   time.Time // 结束时间
 	ExitCode  int       // 退出码
@@ -423,12 +438,14 @@ type DockerConfig struct {
 	User                      string // 用户
 	BindMount                 string // 目录绑定
 	AllowUnregisteredCommands bool   // 是否允许执行未注册的命令
+	UseBuiltinCommands        bool   // 是否使用内置命令
 }
 
 // LocalConfig 本地执行器配置
 type LocalConfig struct {
-	AllowUnregisteredCommands bool // 是否允许执行未注册的命令
-	UseBuiltinCommands        bool // 是否使用内置命���
+	AllowUnregisteredCommands bool   // 是否允许执行未注册的命令
+	UseBuiltinCommands        bool   // 是否使用内置命令
+	WorkDir                   string // 工作目录
 }
 
 // ExecutorBuilder 定义了执行器构建器的接口。
@@ -436,7 +453,7 @@ type LocalConfig struct {
 type ExecutorBuilder interface {
 	// Build 创建并返回一个新的执行器实例。
 	// 每次调用都应该返回一个独立的执行器实例。
-	Build() (Executor, error)
+	Build(options *ExecuteOptions) (Executor, error)
 }
 
 // BuiltinCommandProvider 定义了内置命令提供者的接口。
@@ -447,9 +464,24 @@ type BuiltinCommandProvider interface {
 }
 
 // ExecutorBuilderFunc 是一个便捷的函数类型，实现了 ExecutorBuilder 接口。
-type ExecutorBuilderFunc func() (Executor, error)
+type ExecutorBuilderFunc func(options *ExecuteOptions) (Executor, error)
 
 // Build 实现 ExecutorBuilder 接口。
-func (f ExecutorBuilderFunc) Build() (Executor, error) {
-	return f()
+func (f ExecutorBuilderFunc) Build(options *ExecuteOptions) (Executor, error) {
+	return f(options)
+}
+
+// InteractiveOptions 定义交互式命令的选项
+type InteractiveOptions struct {
+	// TerminalType 是终端类型 (e.g., "xterm")
+	TerminalType string `json:"terminal_type,omitempty"`
+
+	// Rows 是终端行数
+	Rows uint16 `json:"rows,omitempty"`
+
+	// Cols 是终端列数
+	Cols uint16 `json:"cols,omitempty"`
+
+	// Raw 是否使用原始模式
+	Raw bool `json:"raw,omitempty"`
 }

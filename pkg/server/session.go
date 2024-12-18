@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/iamlongalong/runshell/pkg/executor"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
@@ -95,27 +94,27 @@ func (m *MemorySessionManager) UpdateSession(session *types.Session) error {
 	return nil
 }
 
-// CreateExecutor 创建执行器
-func CreateExecutor(req *types.SessionRequest) (types.Executor, error) {
-	var builder types.ExecutorBuilder
+// // CreateExecutor 创建执行器
+// func CreateExecutor(req *types.SessionRequest) (types.Executor, error) {
+// 	var builder types.ExecutorBuilder
 
-	switch req.ExecutorType {
-	case types.ExecutorTypeLocal:
-		builder = executor.NewLocalExecutorBuilder(*req.LocalConfig).
-			WithOptions(req.Options)
-	case types.ExecutorTypeDocker:
-		builder = executor.NewDockerExecutorBuilder(*req.DockerConfig).
-			WithOptions(req.Options)
-	default:
-		return nil, fmt.Errorf("unsupported executor type: %s", req.ExecutorType)
-	}
+// 	switch req.ExecutorType {
+// 	case types.ExecutorTypeLocal:
+// 		builder = executor.NewLocalExecutorBuilder(*req.LocalConfig).
+// 			WithOptions(req.Options)
+// 	case types.ExecutorTypeDocker:
+// 		builder = docker.NewDockerExecutorBuilder(*req.DockerConfig).
+// 			WithOptions(req.Options)
+// 	default:
+// 		return nil, fmt.Errorf("unsupported executor type: %s", req.ExecutorType)
+// 	}
 
-	return builder.Build()
-}
+// 	return builder.Build(req.Options)
+// }
 
-// createLocalExecutor 创建本地执行器
-func createLocalExecutor(config types.LocalConfig, options *types.ExecuteOptions) (types.Executor, error) {
-	builder := executor.NewLocalExecutorBuilder(config).
-		WithOptions(options)
-	return builder.Build()
-}
+// // createLocalExecutor 创建本地执行器
+// func createLocalExecutor(config types.LocalConfig, options *types.ExecuteOptions) (types.Executor, error) {
+// 	builder := executor.NewLocalExecutorBuilder(config).
+// 		WithOptions(options)
+// 	return builder.Build(options)
+// }

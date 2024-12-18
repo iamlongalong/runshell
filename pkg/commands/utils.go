@@ -15,7 +15,7 @@ type TouchCommand struct{}
 
 // Execute 执行 touch 命令。
 func (c *TouchCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // WriteCommand 实现了 'write' 命令。
@@ -24,7 +24,7 @@ type WriteCommand struct{}
 
 // Execute 执行 write 命令。
 func (c *WriteCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // FindCommand 实现了 'find' 命令。
@@ -32,7 +32,7 @@ type FindCommand struct{}
 
 // Execute 执行 find 命令。
 func (c *FindCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // GrepCommand 实现了 'grep' 命令。
@@ -40,7 +40,7 @@ type GrepCommand struct{}
 
 // Execute 执行 grep 命令。
 func (c *GrepCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // TailCommand 实现了 'tail' 命令。
@@ -51,13 +51,13 @@ type TailCommand struct{}
 //   - -n<num>：显示的行数（可选，默认10）
 //   - 文件路径
 func (c *TailCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 type XargsCommand struct{}
 
 func (c *XargsCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // MvCommand implements mv command
@@ -69,7 +69,7 @@ func (c *MvCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, er
 		return nil, fmt.Errorf("mv requires source and destination arguments")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // HeadCommand implements head command
@@ -80,7 +80,7 @@ func (c *HeadCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("head requires a file argument")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // SortCommand implements sort command
@@ -107,7 +107,7 @@ func (c *SortCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 	}
 
 	// 通过executor执行命令
-	return ctx.Executor.Execute(newCtx)
+	return ctx.Executor.ExecuteCommand(newCtx)
 }
 
 // UniqCommand implements uniq command
@@ -118,21 +118,21 @@ func (c *UniqCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 		return nil, fmt.Errorf("uniq requires a file argument")
 	}
 
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // NetstatCommand implements netstat command
 type NetstatCommand struct{}
 
 func (c *NetstatCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // IfconfigCommand implements ifconfig command
 type IfconfigCommand struct{}
 
 func (c *IfconfigCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	return ctx.Executor.Execute(ctx)
+	return ctx.Executor.ExecuteCommand(ctx)
 }
 
 // CurlCommand implements curl command
@@ -160,7 +160,7 @@ func (c *CurlCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, 
 	}
 
 	// 通过executor执行命令
-	return ctx.Executor.Execute(newCtx)
+	return ctx.Executor.ExecuteCommand(newCtx)
 }
 
 // SedCommand implements sed command
@@ -194,7 +194,7 @@ func (c *SedCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, e
 	}
 
 	// 通过executor执行命令
-	execResult, err := ctx.Executor.Execute(execCtx)
+	execResult, err := ctx.Executor.ExecuteCommand(execCtx)
 	if err != nil {
 		result.Error = err
 		result.ExitCode = 1

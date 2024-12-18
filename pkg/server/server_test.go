@@ -30,6 +30,10 @@ func (m *MockExecutor) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult,
 	return &types.ExecuteResult{}, nil
 }
 
+func (m *MockExecutor) ExecuteCommand(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	return m.Execute(ctx)
+}
+
 func (m *MockExecutor) ListCommands() []types.CommandInfo {
 	if m.ListCommandsFunc != nil {
 		return m.ListCommandsFunc()
@@ -85,7 +89,7 @@ func TestHandleExec(t *testing.T) {
 	}
 
 	// 创建服务器实例
-	s := NewServer(types.ExecutorBuilderFunc(func() (types.Executor, error) {
+	s := NewServer(types.ExecutorBuilderFunc(func(options *types.ExecuteOptions) (types.Executor, error) {
 		return mockExecutor, nil
 	}), ":8080")
 
@@ -133,7 +137,7 @@ func TestHandleListCommands(t *testing.T) {
 	}
 
 	// 创建服务器实例
-	s := NewServer(types.ExecutorBuilderFunc(func() (types.Executor, error) {
+	s := NewServer(types.ExecutorBuilderFunc(func(options *types.ExecuteOptions) (types.Executor, error) {
 		return mockExecutor, nil
 	}), ":8080")
 
@@ -172,7 +176,7 @@ func TestHandleCommandHelp(t *testing.T) {
 	}
 
 	// 创建服务器实例
-	s := NewServer(types.ExecutorBuilderFunc(func() (types.Executor, error) {
+	s := NewServer(types.ExecutorBuilderFunc(func(options *types.ExecuteOptions) (types.Executor, error) {
 		return mockExecutor, nil
 	}), ":8080")
 

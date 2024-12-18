@@ -22,17 +22,20 @@ func (c *LSCommand) Info() types.CommandInfo {
 
 // Execute 执行 ls 命令。
 func (c *LSCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
-	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "ls", Args: ctx.Command.Args},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
 	}
 
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
+	// 创建一个新的上下文，避免递归调用
+	newCtx := ctx.Copy() // 使用 Copy 方法复制上下文
+	newCtx.Command = types.Command{Command: "ls", Args: ctx.Command.Args}
+
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }
 
 // CatCommand 实现了 cat 命令。
@@ -49,21 +52,24 @@ func (c *CatCommand) Info() types.CommandInfo {
 
 // Execute 执行 cat 命令。
 func (c *CatCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
 	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("no file specified")
 	}
 
 	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "cat", Args: ctx.Command.Args},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
-	}
+	newCtx := ctx.Copy()
+	newCtx.Command = types.Command{Command: "cat", Args: ctx.Command.Args}
 
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }
 
 // MkdirCommand 实现了 mkdir 命令。
@@ -80,21 +86,24 @@ func (c *MkdirCommand) Info() types.CommandInfo {
 
 // Execute 执行 mkdir 命令。
 func (c *MkdirCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
 	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("no directory specified")
 	}
 
 	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "mkdir", Args: ctx.Command.Args},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
-	}
+	newCtx := ctx.Copy()
+	newCtx.Command = types.Command{Command: "mkdir", Args: ctx.Command.Args}
 
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }
 
 // RmCommand 实现了 rm 命令。
@@ -111,21 +120,24 @@ func (c *RmCommand) Info() types.CommandInfo {
 
 // Execute 执行 rm 命令。
 func (c *RmCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
 	if len(ctx.Command.Args) == 0 {
 		return nil, fmt.Errorf("no file specified")
 	}
 
 	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "rm", Args: ctx.Command.Args},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
-	}
+	newCtx := ctx.Copy()
+	newCtx.Command = types.Command{Command: "rm", Args: ctx.Command.Args}
 
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }
 
 // CpCommand 实现了 cp 命令。
@@ -142,21 +154,24 @@ func (c *CpCommand) Info() types.CommandInfo {
 
 // Execute 执行 cp 命令。
 func (c *CpCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
 	if len(ctx.Command.Args) < 2 {
 		return nil, fmt.Errorf("cp requires source and destination")
 	}
 
 	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "cp", Args: ctx.Command.Args},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
-	}
+	newCtx := ctx.Copy()
+	newCtx.Command = types.Command{Command: "cp", Args: ctx.Command.Args}
 
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }
 
 // PWDCommand 实现了 pwd 命令。
@@ -203,6 +218,14 @@ func (c *ReadFileCommand) Info() types.CommandInfo {
 
 // Execute 执行 readfile 命令。
 func (c *ReadFileCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResult, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("context is nil")
+	}
+
+	if ctx.Executor == nil {
+		return nil, fmt.Errorf("executor is nil")
+	}
+
 	if len(ctx.Command.Args) < 1 {
 		return nil, fmt.Errorf("no file specified")
 	}
@@ -223,14 +246,9 @@ func (c *ReadFileCommand) Execute(ctx *types.ExecuteContext) (*types.ExecuteResu
 	}
 
 	// 创建一个新的上下文，避免递归调用
-	newCtx := &types.ExecuteContext{
-		Context:     ctx.Context,
-		Command:     types.Command{Command: "cat", Args: []string{ctx.Command.Args[0]}},
-		Options:     ctx.Options,
-		Executor:    ctx.Executor,
-		PipeContext: ctx.PipeContext,
-	}
+	newCtx := ctx.Copy()
+	newCtx.Command = types.Command{Command: "cat", Args: []string{ctx.Command.Args[0]}}
 
 	// 直接使用执行器执行系统命令
-	return ctx.Executor.Execute(newCtx)
+	return newCtx.Executor.ExecuteCommand(newCtx)
 }

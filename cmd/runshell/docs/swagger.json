@@ -18,7 +18,7 @@
         },
         "version": "1.0"
     },
-    "host": "localhost:7070",
+    "host": "localhost:8080",
     "basePath": "/api/v1",
     "paths": {
         "/commands": {
@@ -390,6 +390,10 @@
                     "description": "Docker 镜像",
                     "type": "string"
                 },
+                "useBuiltinCommands": {
+                    "description": "是否使用内置命令",
+                    "type": "boolean"
+                },
                 "user": {
                     "description": "用户",
                     "type": "string"
@@ -417,10 +421,18 @@
                         "type": "string"
                     }
                 },
+                "shell": {
+                    "description": "Shell 指定执行命令的 shell, 默认使用 /bin/bash",
+                    "type": "string"
+                },
                 "timeout": {
                     "description": "Timeout 指定命令执行的超时时间（纳秒）\nswagger:strfmt int64",
                     "type": "integer",
                     "example": 30000000000
+                },
+                "tty": {
+                    "description": "TTY 是否分配伪终端",
+                    "type": "boolean"
                 },
                 "user": {
                     "description": "User 指定执行命令的用户信息",
@@ -444,8 +456,12 @@
                     "type": "boolean"
                 },
                 "useBuiltinCommands": {
-                    "description": "是否使用内置命���",
+                    "description": "是否使用内置命令",
                     "type": "boolean"
+                },
+                "workDir": {
+                    "description": "工作目录",
+                    "type": "string"
                 }
             }
         },

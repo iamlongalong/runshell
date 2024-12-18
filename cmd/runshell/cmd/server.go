@@ -9,6 +9,7 @@ import (
 
 	"github.com/iamlongalong/runshell/pkg/audit"
 	"github.com/iamlongalong/runshell/pkg/executor"
+	"github.com/iamlongalong/runshell/pkg/executor/docker"
 	"github.com/iamlongalong/runshell/pkg/server"
 	"github.com/iamlongalong/runshell/pkg/types"
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ var (
 	auditDir     string
 	dockerImage  string
 	executorType string
+	workDir      string
 )
 
 var serverCmd = &cobra.Command{
@@ -27,7 +29,9 @@ var serverCmd = &cobra.Command{
 	Long:  `Start the HTTP server to handle command execution requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 创建执行器构建器
-		execBuilder, err := createExecutorBuilder(executorType)
+		execBuilder, err := createExecutorBuilder(executorType, &types.ExecuteOptions{
+			WorkDir: workDir,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to create executor builder: %w", err)
 		}
@@ -43,8 +47,8 @@ var serverCmd = &cobra.Command{
 
 			// 创建审计执行器构建器
 			origBuilder := execBuilder
-			execBuilder = types.ExecutorBuilderFunc(func() (types.Executor, error) {
-				exec, err := origBuilder.Build()
+			execBuilder = types.ExecutorBuilderFunc(func(options *types.ExecuteOptions) (types.Executor, error) {
+				exec, err := origBuilder.Build(options)
 				if err != nil {
 					return nil, err
 				}
@@ -82,25 +86,27 @@ func init() {
 	serverCmd.Flags().StringVar(&auditDir, "audit-dir", "", "Directory for audit logs")
 	serverCmd.Flags().StringVar(&dockerImage, "docker-image", "", "Docker image to use")
 	serverCmd.Flags().StringVar(&executorType, "executor-type", "local", "Type of executor to use (local or docker)")
+	serverCmd.Flags().StringVar(&workDir, "work-dir", "/workspace", "Work directory")
 }
 
 // createExecutorBuilder 创建执行器构建器
-func createExecutorBuilder(execType string) (types.ExecutorBuilder, error) {
+func createExecutorBuilder(execType string, options *types.ExecuteOptions) (types.ExecutorBuilder, error) {
 	switch execType {
 	case "docker":
 		if dockerImage == "" {
 			dockerImage = "ubuntu:latest"
 		}
-		return executor.NewDockerExecutorBuilder(types.DockerConfig{
+		return docker.NewDockerExecutorBuilder(types.DockerConfig{
 			Image:                     dockerImage,
-			WorkDir:                   "/workspace",
+			WorkDir:                   workDir,
 			AllowUnregisteredCommands: true,
-		}).WithOptions(nil), nil
+		}).WithOptions(options), nil
 	case "local":
 		return executor.NewLocalExecutorBuilder(types.LocalConfig{
 			AllowUnregisteredCommands: true,
 			UseBuiltinCommands:        true,
-		}).WithOptions(nil), nil
+			WorkDir:                   workDir,
+		}).WithOptions(options), nil
 	default:
 		return nil, fmt.Errorf("unsupported executor type: %s", execType)
 	}

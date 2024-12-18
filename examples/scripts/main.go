@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/iamlongalong/runshell/pkg/commands/script"
-	"github.com/iamlongalong/runshell/pkg/executor"
+	"github.com/iamlongalong/runshell/pkg/executor/docker"
 	"github.com/iamlongalong/runshell/pkg/types"
 )
 
@@ -77,12 +77,12 @@ func createExecutors() (map[script.ScriptType]types.Executor, error) {
 	executors := make(map[script.ScriptType]types.Executor)
 
 	// 创建 Python 执行器
-	pythonExec, err := executor.NewDockerExecutor(types.DockerConfig{
+	pythonExec, err := docker.NewDockerExecutor(types.DockerConfig{
 		Image:                     defaultPythonImage,
 		AllowUnregisteredCommands: true,
 		BindMount:                 scriptDir + ":/app",
 		WorkDir:                   "/app",
-	}, &types.ExecuteOptions{})
+	}, &types.ExecuteOptions{}, nil)
 	if err != nil {
 		return nil, err
 	}

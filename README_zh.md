@@ -26,7 +26,7 @@ RunShell 是一个强大的命令执行框架，支持本地和 Docker 容器中
   - 命令帮助系统
 
 - **安全特性**
-  - 命令执行审计
+  - ���令执行审计
   - 用户权限控制
   - 资源使用统计
   - 超时控制
@@ -175,18 +175,72 @@ runshell shell
 
 ### RESTful API
 
-- `GET /health` - 健康检查
-- `POST /exec` - 执行命令
-- `GET /commands` - 列出可用命令
-- `GET /commands/{name}` - 获取命令信息
+```bash
+# 健康检查
+curl http://localhost:8080/api/v1/health
 
-详细的 API 文档请参考 [API.md](docs/API.md)。
+# 执行命令
+curl -X POST http://localhost:8080/api/v1/exec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "ls",
+    "args": ["-l"],
+    "workdir": "/tmp",
+    "env": {"KEY": "VALUE"}
+  }'
+
+# 列出可用命令
+curl http://localhost:8080/api/v1/commands
+
+# 获取命令帮助
+curl http://localhost:8080/api/v1/help?command=ls
+
+# 会话管理
+# 创建新会话
+curl -X POST http://localhost:8080/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "executor_type": "docker",
+    "docker_config": {
+      "image": "golang:1.20",
+      "workdir": "/workspace",
+      "bind_mount": "/local/path:/workspace"
+    },
+    "options": {
+      "workdir": "/workspace",
+      "env": {"GOPROXY": "https://goproxy.cn,direct"}
+    }
+  }'
+
+# 列出所有会话
+curl http://localhost:8080/api/v1/sessions
+
+# 在会话中执行命令
+curl -X POST http://localhost:8080/api/v1/sessions/{session_id}/exec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "go",
+    "args": ["version"],
+    "options": {
+      "workdir": "/workspace"
+    }
+  }'
+
+# 删除会话
+curl -X DELETE http://localhost:8080/api/v1/sessions/{session_id}
+
+# 交互式 Shell（WebSocket）
+wscat -c ws://localhost:8080/api/v1/exec/interactive
+# after connected, you can use the following commands:
+# ls -al
+# exit
+```
 
 ## 配置
 
 RunShell 支持以下配置选项：
 
-- `--audit-dir` - 审计日��目录
+- `--audit-dir` - 审计日志目录
 - `--docker-image` - 默认 Docker 镜像
 - `--http` - HTTP 服务器地址
 
